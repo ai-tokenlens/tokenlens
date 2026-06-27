@@ -1,0 +1,22 @@
+[skill]
+id = "java-unit-test-generator"
+name = "Java Unit Test Generator"
+summary = "Generate JUnit 5 + Mockito tests from a Java class"
+version = "1.0.0"
+tags = ["java", "junit5", "mockito", "testing", "tdd"]
+author = "giuseppe@example.com"
+
+[usage]
+instructions = """
+Open the Java class file you want to test, then invoke this skill.
+It produces a complete JUnit 5 test class using Mockito for dependencies,
+covering happy paths, edge cases, and exception scenarios.
+"""
+
+[targets.claude-code]
+type = "SKILL.md"
+entry = "payload/claude-code/SKILL.md"
+
+[targets.copilot]
+type = "instructions"
+entry = "payload/copilot/java-unit-test.instructions.md"

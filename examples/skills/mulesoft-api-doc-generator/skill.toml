@@ -1,0 +1,22 @@
+[skill]
+id = "mulesoft-api-doc-generator"
+name = "MuleSoft API Documentation Generator"
+summary = "Generate structured Markdown docs from a MuleSoft RAML/OAS spec"
+version = "1.0.0"
+tags = ["mulesoft", "documentation", "raml", "oas", "api"]
+author = "giuseppe@example.com"
+
+[usage]
+instructions = """
+Place a RAML (.raml) or OpenAPI (.yaml/.json) spec file in your working directory,
+then invoke this skill. It produces a structured Markdown document covering:
+endpoints, request/response schemas, authentication, error codes, and examples.
+"""
+
+[targets.claude-code]
+type = "SKILL.md"
+entry = "payload/claude-code/SKILL.md"
+
+[targets.copilot]
+type = "instructions"
+entry = "payload/copilot/mulesoft-api-doc.instructions.md"

@@ -1,0 +1,22 @@
+[skill]
+id = "git-commit-message"
+name = "Git Commit Message Generator"
+summary = "Generate a Conventional Commits message from a git diff"
+version = "1.0.0"
+tags = ["git", "conventional-commits", "dx", "changelog"]
+author = "giuseppe@example.com"
+
+[usage]
+instructions = """
+Run `git diff --staged` and paste the output, or let the tool read it from context.
+The skill produces a Conventional Commits-compliant message with type, optional scope,
+short subject, and body with breaking-change footer if needed.
+"""
+
+[targets.claude-code]
+type = "SKILL.md"
+entry = "payload/claude-code/SKILL.md"
+
+[targets.copilot]
+type = "instructions"
+entry = "payload/copilot/git-commit-message.instructions.md"
