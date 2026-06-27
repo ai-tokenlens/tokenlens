@@ -1,0 +1,36 @@
+name: CLI CI
+
+on:
+  push:
+    paths:
+      - "tklens-cli/**"
+  pull_request:
+    paths:
+      - "tklens-cli/**"
+
+jobs:
+  build-and-test:
+    name: build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tklens-cli/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tklens-cli
+        run: npm ci
+
+      - name: Build
+        working-directory: tklens-cli
+        run: npm run build
+
+      - name: Test
+        working-directory: tklens-cli
+        run: npm test
