@@ -1,11 +1,12 @@
 import { Command, Flags } from '@oclif/core';
+import * as cliProgress from 'cli-progress';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ApiClient } from '../lib/apiClient';
 import { readConfig } from '../lib/config';
 
-interface EventPayload {
+export interface EventPayload {
   user_id: string;
   tool: string;
   model?: string;
@@ -17,7 +18,7 @@ interface EventPayload {
   timestamp: string;
 }
 
-function findFiles(dir: string, exts: string[]): string[] {
+export function findFiles(dir: string, exts: string[]): string[] {
   const results: string[] = [];
   if (!fs.existsSync(dir)) return results;
   const walk = (d: string) => {
@@ -33,7 +34,7 @@ function findFiles(dir: string, exts: string[]): string[] {
   return results;
 }
 
-function copilotStorageDirs(): string[] {
+export function copilotStorageDirs(): string[] {
   const home = os.homedir();
   const plat = process.platform;
   let base: string;
@@ -85,68 +86,73 @@ function deepSearch(obj: unknown, depth = 0): Array<{ input: number; output: num
   return results;
 }
 
-function parseCopilotFiles(files: string[]): EventPayload[] {
+export function parseCopilotFiles(files: string[], tick?: () => void): EventPayload[] {
   const events: EventPayload[] = [];
   for (const f of files) {
-    let raw: unknown;
-    try { raw = JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { continue; }
-    const hits = deepSearch(raw);
-    for (const h of hits) {
-      if (h.input === 0 && h.output === 0) continue;
-      events.push({
-        user_id: '',
-        tool: 'copilot-cli',
-        model: h.model,
-        input_tokens: h.input,
-        output_tokens: h.output,
-        cache_read_tokens: 0,
-        cache_write_tokens: 0,
-        total_tokens: h.input + h.output,
-        timestamp: h.timestamp ?? new Date().toISOString(),
-      });
-    }
+    try {
+      const raw: unknown = JSON.parse(fs.readFileSync(f, 'utf-8'));
+      const hits = deepSearch(raw);
+      for (const h of hits) {
+        if (h.input === 0 && h.output === 0) continue;
+        events.push({
+          user_id: '',
+          tool: 'copilot-cli',
+          model: h.model,
+          input_tokens: h.input,
+          output_tokens: h.output,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+          total_tokens: h.input + h.output,
+          timestamp: h.timestamp ?? new Date().toISOString(),
+        });
+      }
+    } catch { /* skip unreadable/unparseable files */ }
+    tick?.();
   }
   return events;
 }
 
-function parseClaudeCodeFiles(files: string[]): EventPayload[] {
+export function parseClaudeCodeFiles(files: string[], tick?: () => void): EventPayload[] {
   const events: EventPayload[] = [];
   for (const f of files) {
-    let lines: string[];
-    try { lines = fs.readFileSync(f, 'utf-8').split('\n'); } catch { continue; }
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let obj: unknown;
-      try { obj = JSON.parse(line); } catch { continue; }
-      if (typeof obj !== 'object' || obj === null) continue;
-      const o = obj as Record<string, unknown>;
+    try {
+      const lines = fs.readFileSync(f, 'utf-8').split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        let obj: unknown;
+        try { obj = JSON.parse(line); } catch { continue; }
+        if (typeof obj !== 'object' || obj === null) continue;
+        const o = obj as Record<string, unknown>;
 
-      // top-level usage object (common Claude API shape)
-      const usage = o['usage'] as Record<string, number> | undefined;
-      if (usage && typeof usage === 'object') {
-        const input = usage['input_tokens'] ?? 0;
-        const output = usage['output_tokens'] ?? 0;
-        const cacheRead = usage['cache_read_input_tokens'] ?? 0;
-        const cacheWrite = usage['cache_creation_input_tokens'] ?? 0;
-        if (input > 0 || output > 0) {
-          const ts = o['timestamp'] as string | undefined;
-          const model = o['model'] as string | undefined;
-          events.push({
-            user_id: '',
-            tool: 'claude-code',
-            model,
-            input_tokens: input,
-            output_tokens: output,
-            cache_read_tokens: cacheRead,
-            cache_write_tokens: cacheWrite,
-            total_tokens: input + output + cacheRead + cacheWrite,
-            timestamp: ts ?? new Date().toISOString(),
-          });
+        const usage = o['usage'] as Record<string, number> | undefined;
+        if (usage && typeof usage === 'object') {
+          const input = usage['input_tokens'] ?? 0;
+          const output = usage['output_tokens'] ?? 0;
+          const cacheRead = usage['cache_read_input_tokens'] ?? 0;
+          const cacheWrite = usage['cache_creation_input_tokens'] ?? 0;
+          if (input > 0 || output > 0) {
+            events.push({
+              user_id: '',
+              tool: 'claude-code',
+              model: o['model'] as string | undefined,
+              input_tokens: input,
+              output_tokens: output,
+              cache_read_tokens: cacheRead,
+              cache_write_tokens: cacheWrite,
+              total_tokens: input + output + cacheRead + cacheWrite,
+              timestamp: (o['timestamp'] as string | undefined) ?? new Date().toISOString(),
+            });
+          }
         }
       }
-    }
+    } catch { /* skip unreadable files */ }
+    tick?.();
   }
   return events;
+}
+
+export function filterBySince(events: EventPayload[], since: Date): EventPayload[] {
+  return events.filter(e => new Date(e.timestamp) >= since);
 }
 
 export default class Collect extends Command {
@@ -154,12 +160,18 @@ export default class Collect extends Command {
 
   static flags = {
     tool: Flags.string({
-      description: 'Tool to collect from',
+      description: 'Tool to collect from (auto-detected if omitted)',
       options: ['copilot-cli', 'claude-code'],
-      required: true,
+    }),
+    since: Flags.string({
+      description: 'Only collect events after this ISO date, e.g. 2026-01-01T00:00:00Z',
+    }),
+    output: Flags.string({
+      description: 'Output format instead of sending to API',
+      options: ['json'],
     }),
     'dry-run': Flags.boolean({
-      description: 'Print events without sending them',
+      description: 'Print events without sending (deprecated: prefer --output=json)',
       default: false,
     }),
   };
@@ -169,19 +181,57 @@ export default class Collect extends Command {
     const config = readConfig();
     const userId = config.userId ?? os.userInfo().username;
 
-    let events: EventPayload[] = [];
-
-    if (flags.tool === 'copilot-cli') {
-      const dirs = copilotStorageDirs();
-      const files: string[] = [];
-      for (const d of dirs) files.push(...findFiles(d, ['.json']));
-      this.log(`Found ${files.length} Copilot session file(s) to scan.`);
-      events = parseCopilotFiles(files);
+    // Resolve which tools to collect from
+    const tools: string[] = [];
+    if (flags.tool) {
+      tools.push(flags.tool);
     } else {
       const claudeDir = path.join(os.homedir(), '.claude');
-      const files = findFiles(claudeDir, ['.jsonl']);
-      this.log(`Found ${files.length} Claude Code log file(s) to scan.`);
-      events = parseClaudeCodeFiles(files);
+      if (fs.existsSync(claudeDir)) tools.push('claude-code');
+      const copilotDirs = copilotStorageDirs();
+      if (copilotDirs.some(d => fs.existsSync(d))) tools.push('copilot-cli');
+      if (tools.length === 0) {
+        this.warn('No known tool directories found. Use --tool to specify one explicitly.');
+        return;
+      }
+      this.log(`Auto-detected tool(s): ${tools.join(', ')}`);
+    }
+
+    // Enumerate all session files
+    const copilotFiles: string[] = [];
+    const claudeFiles: string[] = [];
+    for (const tool of tools) {
+      if (tool === 'copilot-cli') {
+        for (const d of copilotStorageDirs()) copilotFiles.push(...findFiles(d, ['.json']));
+      } else {
+        claudeFiles.push(...findFiles(path.join(os.homedir(), '.claude'), ['.jsonl']));
+      }
+    }
+    const totalFiles = copilotFiles.length + claudeFiles.length;
+    this.log(`Found ${totalFiles} session file(s) to scan.`);
+
+    // Progress bar (TTY only)
+    const bar = process.stdout.isTTY && totalFiles > 0
+      ? new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic)
+      : null;
+    bar?.start(totalFiles, 0);
+
+    let events: EventPayload[] = [
+      ...parseCopilotFiles(copilotFiles, () => bar?.increment()),
+      ...parseClaudeCodeFiles(claudeFiles, () => bar?.increment()),
+    ];
+
+    bar?.stop();
+
+    // Filter by --since
+    if (flags.since) {
+      const sinceDate = new Date(flags.since);
+      if (isNaN(sinceDate.getTime())) {
+        this.error(`Invalid --since value: "${flags.since}". Use ISO format, e.g. 2026-01-01.`);
+      }
+      const before = events.length;
+      events = filterBySince(events, sinceDate);
+      this.log(`--since filter: ${before} → ${events.length} event(s).`);
     }
 
     // Stamp user_id
@@ -194,12 +244,11 @@ export default class Collect extends Command {
       return;
     }
 
-    if (flags['dry-run']) {
+    if (flags.output === 'json' || flags['dry-run']) {
       this.log(JSON.stringify({ events }, null, 2));
       return;
     }
 
-    // Chunk into batches of 100
     const api = new ApiClient();
     let sent = 0;
     for (let i = 0; i < events.length; i += 100) {

@@ -9,21 +9,27 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "oclif": {
     "bin": "tklens",
     "dirname": "tklens",
     "commands": "./dist/commands",
-    "plugins": ["@oclif/plugin-help"]
+    "plugins": [
+      "@oclif/plugin-help"
+    ]
   },
   "dependencies": {
     "@oclif/core": "^3",
-    "@oclif/plugin-help": "^6"
+    "@oclif/plugin-help": "^6",
+    "cli-progress": "^3.12.0"
   },
   "devDependencies": {
+    "@types/cli-progress": "^3.11.6",
     "@types/node": "^20",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   },
   "engines": {
     "node": ">=20"
