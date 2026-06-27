@@ -1,4 +1,11 @@
 import { Command, Args, Flags } from '@oclif/core';
+import { ApiClient, formatApiError } from '../lib/apiClient';
+
+interface RatingRead {
+  id: string;
+  stars: number;
+  comment?: string;
+}
 
 export default class Rate extends Command {
   static description = 'Rate a skill';
@@ -9,6 +16,21 @@ export default class Rate extends Command {
   };
 
   async run(): Promise<void> {
-    this.log('Not yet implemented: rate');
+    const { args, flags } = await this.parse(Rate);
+    const client = new ApiClient();
+
+    let rating: RatingRead;
+    try {
+      rating = await client.post<RatingRead>(`/api/v1/skills/${args.skillId}/ratings`, {
+        stars: flags.stars,
+        comment: flags.comment ?? null,
+      });
+    } catch (err) {
+      this.error(formatApiError(err));
+    }
+
+    const stars = '★'.repeat(rating.stars) + '☆'.repeat(5 - rating.stars);
+    this.log(`Rated ${args.skillId}: ${stars} (${rating.stars}/5)`);
+    if (rating.comment) this.log(`Comment: ${rating.comment}`);
   }
 }
