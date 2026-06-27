@@ -1,0 +1,35 @@
+{
+  "name": "@tokenlens/cli",
+  "version": "0.1.0",
+  "description": "Low-token CLI for TokenLens — no LLM calls, pure REST",
+  "main": "dist/index.js",
+  "bin": {
+    "tklens": "./bin/run.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "lint": "tsc --noEmit"
+  },
+  "oclif": {
+    "bin": "tklens",
+    "dirname": "tklens",
+    "commands": "./dist/commands",
+    "plugins": ["@oclif/plugin-help"]
+  },
+  "dependencies": {
+    "@oclif/core": "^3",
+    "@oclif/plugin-help": "^6"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ]
+}
