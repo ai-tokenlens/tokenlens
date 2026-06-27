@@ -1,41 +1,73 @@
 import { useAnalyticsSummary } from '../api/client.js'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { formatTokens, formatUsd } from '../utils/formatters.js'
+import TokenTrendChart from '../components/charts/TokenTrendChart.jsx'
+import TopConsumersChart from '../components/charts/TopConsumersChart.jsx'
+import ToolBreakdownPie from '../components/charts/ToolBreakdownPie.jsx'
+import { formatTokens } from '../utils/formatters.js'
+
+function toDateStr(d) {
+  return d.toISOString().slice(0, 10)
+}
+
+const today = toDateStr(new Date())
+const weekAgo = (() => {
+  const d = new Date()
+  d.setDate(d.getDate() - 6)
+  return toDateStr(d)
+})()
 
 export default function Dashboard() {
-  const { data, isLoading } = useAnalyticsSummary()
+  const todaySummary = useAnalyticsSummary({ from: today, to: today })
+  const weekSummary = useAnalyticsSummary({ from: weekAgo, to: today })
 
-  if (isLoading) return <p className="text-gray-500">Loading…</p>
+  const todayTokens = todaySummary.data?.totals?.total_tokens ?? 0
+  const weekTokens = weekSummary.data?.totals?.total_tokens ?? 0
+  const activeUsers = weekSummary.data?.by_user?.length ?? 0
+  const toolsUsed = weekSummary.data?.by_tool?.length ?? 0
+
+  const kpiLoading = todaySummary.isLoading || weekSummary.isLoading
+  const kpiError = todaySummary.isError || weekSummary.isError
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Dashboard</h2>
+      <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
 
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Total Tokens" value={formatTokens(data.total_tokens)} />
-        <StatCard label="Total Cost" value={formatUsd(data.total_cost_usd)} />
-        <StatCard label="Active Users" value={data.active_users} />
+      {kpiError && (
+        <p className="text-sm text-red-500">Failed to load summary data.</p>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard
+          label="Tokens oggi"
+          value={kpiLoading ? '…' : formatTokens(todayTokens)}
+        />
+        <KpiCard
+          label="Tokens (7 giorni)"
+          value={kpiLoading ? '…' : formatTokens(weekTokens)}
+        />
+        <KpiCard
+          label="Utenti attivi"
+          value={kpiLoading ? '…' : activeUsers}
+        />
+        <KpiCard
+          label="Tool in uso"
+          value={kpiLoading ? '…' : toolsUsed}
+        />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-sm font-medium text-gray-500 mb-4">Token Trend (7 days)</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data.trend}>
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-            <YAxis tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-            <Tooltip formatter={(v) => formatTokens(v)} />
-            <Line type="monotone" dataKey="tokens" stroke="#6366f1" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+      <TokenTrendChart />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TopConsumersChart from={weekAgo} to={today} />
+        <ToolBreakdownPie from={weekAgo} to={today} />
       </div>
     </div>
   )
 }
 
-function StatCard({ label, value }) {
+function KpiCard({ label, value }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
       <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
     </div>
   )

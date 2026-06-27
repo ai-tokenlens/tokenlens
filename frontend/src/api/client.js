@@ -5,55 +5,80 @@ export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
 })
 
-// --- Mock data ---
+// --- Analytics hooks ---
 
-const MOCK_SUMMARY = {
-  total_tokens: 4_820_300,
-  total_cost_usd: 14.46,
-  active_users: 12,
-  top_tool: 'claude-sonnet-4-6',
-  trend: [
-    { date: '2026-06-21', tokens: 620000 },
-    { date: '2026-06-22', tokens: 710000 },
-    { date: '2026-06-23', tokens: 540000 },
-    { date: '2026-06-24', tokens: 830000 },
-    { date: '2026-06-25', tokens: 770000 },
-    { date: '2026-06-26', tokens: 900000 },
-    { date: '2026-06-27', tokens: 450000 },
-  ],
-}
-
-const MOCK_SKILLS = [
-  { id: 1, name: 'code-review', description: 'Review PRs for bugs', tags: ['dev'], avg_tokens: 3200, rating: 4.5 },
-  { id: 2, name: 'summarise-doc', description: 'Summarise long docs', tags: ['writing'], avg_tokens: 1800, rating: 4.0 },
-  { id: 3, name: 'sql-gen', description: 'Generate SQL queries', tags: ['dev', 'data'], avg_tokens: 900, rating: 3.8 },
-]
-
-const MOCK_RECOMMENDATIONS = [
-  { skill_id: 2, reason: 'Saves ~1 200 tokens vs your current approach', name: 'summarise-doc' },
-  { skill_id: 3, reason: 'Matches your frequent data queries', name: 'sql-gen' },
-]
-
-// --- Hooks ---
-
-export function useAnalyticsSummary() {
+export function useAnalyticsSummary({ from, to } = {}) {
   return useQuery({
-    queryKey: ['analytics', 'summary'],
-    queryFn: () => Promise.resolve(MOCK_SUMMARY),
+    queryKey: ['analytics', 'summary', from, to],
+    queryFn: async () => {
+      const params = {}
+      if (from) params.from = from
+      if (to) params.to = to
+      const { data } = await api.get('/analytics/summary', { params })
+      return data
+    },
   })
 }
+
+export function useByDay({ from, to } = {}) {
+  return useQuery({
+    queryKey: ['analytics', 'by-day', from, to],
+    queryFn: async () => {
+      const params = {}
+      if (from) params.from = from
+      if (to) params.to = to
+      const { data } = await api.get('/analytics/by-day', { params })
+      return data.days
+    },
+  })
+}
+
+export function useTopConsumers({ limit = 10, from, to } = {}) {
+  return useQuery({
+    queryKey: ['analytics', 'top-consumers', limit, from, to],
+    queryFn: async () => {
+      const params = { limit }
+      if (from) params.from = from
+      if (to) params.to = to
+      const { data } = await api.get('/analytics/top-consumers', { params })
+      return data.consumers
+    },
+  })
+}
+
+// Reuses /analytics/summary – by_tool gives tool→total_tokens breakdown
+export function useToolBreakdown({ from, to } = {}) {
+  return useQuery({
+    queryKey: ['analytics', 'tool-breakdown', from, to],
+    queryFn: async () => {
+      const params = {}
+      if (from) params.from = from
+      if (to) params.to = to
+      const { data } = await api.get('/analytics/summary', { params })
+      return data.by_tool
+    },
+  })
+}
+
+// --- Skills / Recommendations (used by other pages) ---
 
 export function useSkills() {
   return useQuery({
     queryKey: ['skills'],
-    queryFn: () => Promise.resolve(MOCK_SKILLS),
+    queryFn: async () => {
+      const { data } = await api.get('/skills')
+      return data
+    },
   })
 }
 
 export function useRecommendations(userId) {
   return useQuery({
     queryKey: ['recommendations', userId],
-    queryFn: () => Promise.resolve(MOCK_RECOMMENDATIONS),
+    queryFn: async () => {
+      const { data } = await api.get(`/recommendations?user_id=${userId}`)
+      return data
+    },
     enabled: !!userId,
   })
 }
