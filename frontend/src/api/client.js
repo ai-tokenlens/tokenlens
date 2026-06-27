@@ -167,7 +167,7 @@ export function useRecommendations(userId) {
   return useQuery({
     queryKey: ['recommendations', userId],
     queryFn: async () => {
-      const { data } = await api.get(`/recommendations?user_id=${userId}`)
+      const { data } = await api.get(`/recommendations/${userId}`)
       return data
     },
     enabled: !!userId,

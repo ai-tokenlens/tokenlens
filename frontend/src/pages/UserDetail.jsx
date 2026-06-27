@@ -1,29 +1,24 @@
 import { useParams } from 'react-router-dom'
-import { useRecommendations } from '../api/client.js'
+import RecommendationPanel from '../components/RecommendationPanel.jsx'
 
 export default function UserDetail() {
   const { id } = useParams()
-  const { data: recs, isLoading } = useRecommendations(id)
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold">User Detail — {id}</h2>
 
-      <section>
-        <h3 className="text-lg font-semibold mb-3">Recommendations</h3>
-        {isLoading ? (
-          <p className="text-gray-500">Loading…</p>
-        ) : (
-          <ul className="space-y-2">
-            {recs?.map((r) => (
-              <li key={r.skill_id} className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-                <span className="font-medium">{r.name}</span>
-                <span className="text-gray-500 text-sm ml-3">{r.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          {/* TODO(spec): usage history table/charts per user */}
+          <p className="text-gray-400 text-sm">Usage history coming soon.</p>
+        </div>
+
+        <aside className="space-y-3">
+          <h3 className="text-lg font-semibold">Recommendations</h3>
+          <RecommendationPanel userId={id} />
+        </aside>
+      </div>
     </div>
   )
 }
