@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from server.database import get_db
@@ -12,7 +13,7 @@ from server.schemas.skill import (
     SkillUpdate,
     SkillVersionRead,
 )
-from server.services import registry_service
+from server.services import adapter_service, registry_service
 
 router = APIRouter(tags=["skills"])
 
@@ -39,6 +40,26 @@ def get_skill(skill_id: str, db: Session = Depends(get_db)):
     if skill is None:
         raise HTTPException(status_code=404, detail="Skill not found")
     return skill
+
+
+@router.get("/skills/{skill_id}/download")
+def download_skill(
+    skill_id: str,
+    target: str = Query(..., description="claude-code or copilot"),
+    db: Session = Depends(get_db),
+):
+    skill = registry_service.get_skill(db, skill_id)
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    try:
+        tarball = adapter_service.build_tarball(skill, target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(
+        content=tarball,
+        media_type="application/x-tar",
+        headers={"Content-Disposition": f'attachment; filename="{skill_id}-{target}.tar.gz"'},
+    )
 
 
 @router.get("/skills/{skill_id}/versions", response_model=List[SkillVersionRead])
