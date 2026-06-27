@@ -26,6 +26,7 @@ class Skill(Base):
     use_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     rating_avg: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     rating_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deleted_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 

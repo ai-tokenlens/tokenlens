@@ -58,6 +58,25 @@ class SkillRead(BaseModel):
         return v
 
 
+class SkillUpdate(BaseModel):
+    name: Optional[str] = None
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    usage: Optional[str] = None
+    tags: Optional[List[str]] = None
+    author: Optional[str] = None
+    manifest_toml: Optional[str] = None
+    payload_uri: Optional[str] = None
+    checksum: Optional[str] = None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def parse_tags(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+
 class SkillVersionRead(BaseModel):
     id: str
     skill_id: str
