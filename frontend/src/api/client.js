@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
@@ -60,14 +60,105 @@ export function useToolBreakdown({ from, to } = {}) {
   })
 }
 
-// --- Skills / Recommendations (used by other pages) ---
+// --- Skills ---
 
-export function useSkills() {
+export function useSkills({ tag, search, sort } = {}) {
   return useQuery({
-    queryKey: ['skills'],
+    queryKey: ['skills', tag, search, sort],
     queryFn: async () => {
-      const { data } = await api.get('/skills')
+      const params = {}
+      if (tag) params.tag = tag
+      if (search) params.search = search
+      if (sort) params.sort = sort
+      const { data } = await api.get('/skills', { params })
       return data
+    },
+  })
+}
+
+export function useSkill(id) {
+  return useQuery({
+    queryKey: ['skills', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/skills/${id}`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useSkillVersions(id) {
+  return useQuery({
+    queryKey: ['skills', id, 'versions'],
+    queryFn: async () => {
+      const { data } = await api.get(`/skills/${id}/versions`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function useSkillRatings(id) {
+  return useQuery({
+    queryKey: ['skills', id, 'ratings'],
+    queryFn: async () => {
+      const { data } = await api.get(`/skills/${id}/ratings`)
+      return data
+    },
+    enabled: !!id,
+  })
+}
+
+export function usePostRating(id) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ stars, comment }) => {
+      const token = localStorage.getItem('token')
+      const { data } = await api.post(
+        `/skills/${id}/ratings`,
+        { stars, comment },
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      )
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills', id, 'ratings'] })
+      queryClient.invalidateQueries({ queryKey: ['skills', id] })
+    },
+  })
+}
+
+export function useDownloadSkill(id, target) {
+  return useMutation({
+    mutationFn: async () => {
+      const resp = await api.get(`/skills/${id}/download`, {
+        params: { target },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${id}-${target}.tar.gz`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
+  })
+}
+
+export function useCreateSkill() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (skillData) => {
+      const token = localStorage.getItem('token')
+      const { data } = await api.post('/skills', skillData, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills'] })
     },
   })
 }
