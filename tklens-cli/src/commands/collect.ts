@@ -124,7 +124,11 @@ export function parseClaudeCodeFiles(files: string[], tick?: () => void): EventP
         if (typeof obj !== 'object' || obj === null) continue;
         const o = obj as Record<string, unknown>;
 
-        const usage = o['usage'] as Record<string, number> | undefined;
+        // Claude Code JSONL: usage lives at message.usage; top-level usage is a fallback
+        const msg = (typeof o['message'] === 'object' && o['message'] !== null)
+          ? o['message'] as Record<string, unknown>
+          : null;
+        const usage = (msg?.['usage'] ?? o['usage']) as Record<string, number> | undefined;
         if (usage && typeof usage === 'object') {
           const input = usage['input_tokens'] ?? 0;
           const output = usage['output_tokens'] ?? 0;
@@ -134,7 +138,7 @@ export function parseClaudeCodeFiles(files: string[], tick?: () => void): EventP
             events.push({
               user_id: '',
               tool: 'claude-code',
-              model: o['model'] as string | undefined,
+              model: (msg?.['model'] ?? o['model']) as string | undefined,
               input_tokens: input,
               output_tokens: output,
               cache_read_tokens: cacheRead,

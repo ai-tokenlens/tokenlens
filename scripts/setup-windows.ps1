@@ -186,7 +186,8 @@ Write-Step "5 / 5 — Setting AI tool environment variables"
 # Set as permanent User-level environment variables (survive reboots and new terminals)
 Set-UserEnvVar "TOKENLENS_USER"                  $UserEmail
 Set-UserEnvVar "OTEL_EXPORTER_OTLP_ENDPOINT"     "http://localhost:8080/otel"
-Set-UserEnvVar "OTEL_EXPORTER_OTLP_PROTOCOL"     "http/protobuf"
+Set-UserEnvVar "OTEL_EXPORTER_OTLP_PROTOCOL"     "http/json"
+Set-UserEnvVar "OTEL_EXPORTER_OTLP_HEADERS"      "Authorization=Bearer $IngestToken"
 Set-UserEnvVar "OTEL_RESOURCE_ATTRIBUTES"         "tokenlens.user=$UserEmail"
 Set-UserEnvVar "OTEL_SERVICE_NAME"                "copilot-cli"
 Set-UserEnvVar "CLAUDE_CODE_ENABLE_TELEMETRY"     "1"

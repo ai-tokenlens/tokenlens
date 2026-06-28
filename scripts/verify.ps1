@@ -38,9 +38,19 @@ if (Get-Command tklens -ErrorAction SilentlyContinue) {
 
 # OTel
 if ($env:OTEL_EXPORTER_OTLP_ENDPOINT) {
-  Write-Ok "OTel env vars loaded (endpoint: $env:OTEL_EXPORTER_OTLP_ENDPOINT)"
+  Write-Ok "OTel endpoint: $env:OTEL_EXPORTER_OTLP_ENDPOINT"
 } else {
-  Write-Warn "OTel env vars not visible in this session -> open a new terminal window"
+  Write-Warn "OTEL_EXPORTER_OTLP_ENDPOINT not set -> open a new terminal window"
+}
+if ($env:OTEL_EXPORTER_OTLP_HEADERS -match "Authorization=Bearer ") {
+  Write-Ok "OTel auth header present"
+} else {
+  Write-Fail "OTEL_EXPORTER_OTLP_HEADERS missing or lacks Bearer token -> server will return 401 and drop all events"
+}
+if ($env:OTEL_EXPORTER_OTLP_PROTOCOL -eq "http/json") {
+  Write-Ok "OTel protocol: http/json"
+} else {
+  Write-Warn "OTEL_EXPORTER_OTLP_PROTOCOL is '$env:OTEL_EXPORTER_OTLP_PROTOCOL' (expected http/json) -> server cannot parse protobuf"
 }
 
 # Summary

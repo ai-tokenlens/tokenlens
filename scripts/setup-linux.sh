@@ -176,7 +176,8 @@ OTEL_BLOCK="
 # ── TokenLens OTel integration ────────────────────────────────
 export TOKENLENS_USER=\"${USER_EMAIL}\"
 export OTEL_EXPORTER_OTLP_ENDPOINT=\"http://localhost:8080/otel\"
-export OTEL_EXPORTER_OTLP_PROTOCOL=\"http/protobuf\"
+export OTEL_EXPORTER_OTLP_PROTOCOL=\"http/json\"
+export OTEL_EXPORTER_OTLP_HEADERS=\"Authorization=Bearer ${INGEST_TOKEN}\"
 export OTEL_RESOURCE_ATTRIBUTES=\"tokenlens.user=${USER_EMAIL}\"
 export OTEL_SERVICE_NAME=\"copilot-cli\"
 export CLAUDE_CODE_ENABLE_TELEMETRY=1

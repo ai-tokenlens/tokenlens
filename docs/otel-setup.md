@@ -10,7 +10,8 @@ TokenLens collects token usage via OTLP/HTTP (protobuf). The server listens on `
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:8080/otel"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your-ingest-token>"
 export OTEL_SERVICE_NAME="copilot-cli"
 export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 ```
@@ -42,7 +43,8 @@ Copilot emits an `invoke_agent` root span with `chat` and `execute_tool` childre
 ```bash
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:8080/otel"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your-ingest-token>"
 export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 ```
 
@@ -57,13 +59,14 @@ export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 Add to `~/.bash_profile` or `~/.bashrc`:
 
 ```bash
-# TokenLens OTel — Copilot CLI
+# TokenLens OTel
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:8080/otel"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your-ingest-token>"
 export OTEL_SERVICE_NAME="copilot-cli"
 export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 
-# TokenLens OTel — Claude Code (adds to existing OTEL_* above)
+# Claude Code
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
 ```
 
@@ -76,7 +79,8 @@ Add to `~/.zshrc`:
 ```zsh
 # TokenLens OTel
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:8080/otel"
-export OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
+export OTEL_EXPORTER_OTLP_PROTOCOL="http/json"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer <your-ingest-token>"
 export OTEL_SERVICE_NAME="copilot-cli"
 export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
@@ -133,7 +137,8 @@ Add to `$PROFILE` (usually `~\Documents\PowerShell\Microsoft.PowerShell_profile.
 
 ```powershell
 $env:OTEL_EXPORTER_OTLP_ENDPOINT    = "http://localhost:8080/otel"
-$env:OTEL_EXPORTER_OTLP_PROTOCOL    = "http/protobuf"
+$env:OTEL_EXPORTER_OTLP_PROTOCOL    = "http/json"
+$env:OTEL_EXPORTER_OTLP_HEADERS     = "Authorization=Bearer <your-ingest-token>"
 $env:OTEL_SERVICE_NAME               = "copilot-cli"
 $env:OTEL_RESOURCE_ATTRIBUTES        = "tokenlens.user=you@example.com"
 $env:CLAUDE_CODE_ENABLE_TELEMETRY    = "1"

@@ -59,9 +59,19 @@ fi
 
 # OTel env vars
 if [[ -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}" ]]; then
-  ok "OTel env vars loaded (endpoint: $OTEL_EXPORTER_OTLP_ENDPOINT)"
+  ok "OTel endpoint: $OTEL_EXPORTER_OTLP_ENDPOINT"
 else
-  warn "OTel env vars not set in this shell  →  open a new terminal or run: source ~/.zshrc"
+  warn "OTEL_EXPORTER_OTLP_ENDPOINT not set  →  open a new terminal or source your profile"
+fi
+if [[ "${OTEL_EXPORTER_OTLP_HEADERS:-}" == *"Authorization=Bearer "* ]]; then
+  ok "OTel auth header present"
+else
+  fail "OTEL_EXPORTER_OTLP_HEADERS missing or lacks Bearer token  →  server returns 401 and drops all events"
+fi
+if [[ "${OTEL_EXPORTER_OTLP_PROTOCOL:-}" == "http/json" ]]; then
+  ok "OTel protocol: http/json"
+else
+  warn "OTEL_EXPORTER_OTLP_PROTOCOL is '${OTEL_EXPORTER_OTLP_PROTOCOL:-unset}' (expected http/json)  →  server cannot parse protobuf"
 fi
 
 # Summary
