@@ -90,6 +90,8 @@ tklens search mulesoft
 tklens add mulesoft-api-doc-generator --target=auto
 ```
 
+> For a full step-by-step guide, see [GETTING_STARTED.md](./GETTING_STARTED.md)
+
 ---
 
 ## OTel setup verificato

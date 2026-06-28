@@ -131,6 +131,14 @@ Dopo qualche interazione, apri il browser su [http://localhost:3000](http://loca
 
 ## Passo 6 — Esplora il registry delle skill
 
+Il registry include già tre skill pronte all'uso:
+
+| ID | Descrizione |
+|----|-------------|
+| `mulesoft-api-doc-generator` | Genera documentazione API da spec MuleSoft |
+| `java-unit-test-generator` | Genera test JUnit da classi Java |
+| `git-commit-message` | Produce messaggi di commit convenzionali |
+
 ```bash
 # Cerca skill disponibili
 tklens search mulesoft
@@ -140,6 +148,10 @@ tklens info mulesoft-api-doc-generator
 
 # Aggiungi una skill al progetto corrente (rileva il tuo tool automaticamente)
 tklens add mulesoft-api-doc-generator --target=auto
+
+# Altri esempi con le skill seed
+tklens add java-unit-test-generator --target=auto
+tklens add git-commit-message --target=auto
 ```
 
 `--target=auto` rileva se stai usando Claude Code (cerca la cartella `.claude/`) o Copilot (cerca `.copilot/`) e materializza la skill nel formato giusto.
@@ -223,6 +235,50 @@ Il percorso npm globale non è nel PATH. Aggiungi:
 export PATH="$(npm config get prefix)/bin:$PATH"
 ```
 Su Windows, riavvia PowerShell dopo l'installazione.
+
+---
+
+## Configurazione avanzata
+
+### Puntare a un server TokenLens remoto
+
+Se il server gira su una macchina diversa, modifica `.env` nella cartella del progetto:
+
+```
+TOKENLENS_ENDPOINT=http://192.168.1.50:8080
+```
+
+Poi riesegui il login della CLI:
+
+```bash
+tklens login --endpoint http://192.168.1.50:8080 --api-key <your-key>
+```
+
+### Usare PostgreSQL invece di SQLite
+
+Per ambienti di produzione o team con più utenti, usa `docker-compose.prod.yml` che configura PostgreSQL:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Vedi [`docker-compose.prod.yml`](./docker-compose.prod.yml) per i parametri di connessione (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
+
+### Esporre il server sulla rete locale
+
+Per rendere il server accessibile ad altri dispositivi sulla stessa rete, imposta `HOST` in `.env`:
+
+```
+HOST=0.0.0.0
+```
+
+Poi rilancia:
+
+```bash
+docker compose up -d
+```
+
+Il server sarà raggiungibile all'indirizzo IP della tua macchina sulla porta configurata (default 8080).
 
 ---
 
