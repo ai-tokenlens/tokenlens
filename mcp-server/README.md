@@ -1,22 +1,76 @@
-# tokenlens-mcp
+# TokenLens MCP Server
 
-MCP server that exposes the [TokenLens](../README.md) skill registry to AI agents (Claude Code, GitHub Copilot, etc.).
+Exposes the TokenLens skill registry to AI agents via the Model Context Protocol (MCP).  
+Supports stdio (default) and HTTP/SSE transports.
 
-## Tools
+## Quick start
 
-| Tool | Description |
-|------|-------------|
-| `search_skills` | Full-text search across registry skills |
-| `get_skill` | Fetch metadata + usage instructions for a skill |
-| `add_skill_to_workspace` | Download + extract a skill tarball into your working directory |
-| `rate_skill` | Submit a 1–5 star rating with an optional comment |
+### Claude Code (stdio)
 
-## Environment variables
+Run `tklens mcp-setup` to auto-generate the snippet, or add manually to `~/.claude/claude_desktop_config.json`:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TOKENLENS_ENDPOINT` | `http://localhost:8000` | Base URL of the TokenLens server |
-| `TOKENLENS_API_KEY` | _(empty)_ | Bearer token (required if server has auth enabled) |
+```json
+{
+  "mcpServers": {
+    "tokenlens": {
+      "command": "npx",
+      "args": ["tokenlens-mcp"],
+      "env": {
+        "TOKENLENS_ENDPOINT": "http://localhost:8080",
+        "TOKENLENS_API_KEY": "<your-key>",
+        "TOKENLENS_USER": "<your-email>"
+      }
+    }
+  }
+}
+```
+
+### Copilot CLI (stdio)
+
+```bash
+tklens mcp-setup   # copy the .copilot/mcp.json snippet
+```
+
+Or manually add to `.copilot/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "tokenlens": {
+      "command": "npx",
+      "args": ["tokenlens-mcp"],
+      "env": {
+        "TOKENLENS_ENDPOINT": "http://localhost:8080",
+        "TOKENLENS_API_KEY": "<your-key>",
+        "TOKENLENS_USER": "<your-email>"
+      }
+    }
+  }
+}
+```
+
+### HTTP/SSE mode (remote agents)
+
+```bash
+TOKENLENS_MCP_TRANSPORT=http npx tokenlens-mcp
+# Listens on 0.0.0.0:8082/sse
+```
+
+Connect via:
+
+```json
+{
+  "mcpServers": {
+    "tokenlens": { "url": "http://localhost:8082/sse" }
+  }
+}
+```
+
+Via Docker Compose (profile disabled by default):
+
+```bash
+docker compose --profile mcp up
+```
 
 ## Build
 
@@ -24,67 +78,35 @@ MCP server that exposes the [TokenLens](../README.md) skill registry to AI agent
 cd mcp-server
 npm install
 npm run build
+npm test
 ```
 
-## Configure in Claude Code (`claude_desktop_config.json`)
+## Environment variables
 
-Add the following to `~/.config/Claude/claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+| Variable | Default | Description |
+|---|---|---|
+| `TOKENLENS_ENDPOINT` | `http://localhost:8080` | TokenLens server URL |
+| `TOKENLENS_API_KEY` | — | Bearer token (required for `rate_skill`, `publish_skill`) |
+| `TOKENLENS_USER` | — | User email for analytics + recommendations |
+| `TOKENLENS_MCP_TRANSPORT` | `stdio` | `stdio` or `http` |
+| `TOKENLENS_MCP_PORT` | `8082` | Port for HTTP/SSE mode |
+| `TOKENLENS_MCP_TRACK_USAGE` | `true` | Set `false` to disable token loop-back |
 
-```json
-{
-  "mcpServers": {
-    "tokenlens": {
-      "command": "node",
-      "args": ["/absolute/path/to/tokenlens/mcp-server/dist/index.js"],
-      "env": {
-        "TOKENLENS_ENDPOINT": "http://localhost:8000",
-        "TOKENLENS_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
+## Tools (6)
 
-Or, if you install the package globally (`npm install -g .` from `mcp-server/`):
+| Tool | Description | Auth required |
+|---|---|---|
+| `search_skills` | Search registry by query/tag/sort | No |
+| `get_skill` | Full metadata + usage instructions | No |
+| `add_skill_to_workspace` | Download + extract skill tarball | No |
+| `rate_skill` | Submit 1–5 star rating | Yes |
+| `get_my_usage` | Token usage summary for TOKENLENS_USER | No |
+| `publish_skill` | Publish new skill from base64 tarball | Yes |
 
-```json
-{
-  "mcpServers": {
-    "tokenlens": {
-      "command": "tokenlens-mcp",
-      "env": {
-        "TOKENLENS_ENDPOINT": "http://localhost:8000",
-        "TOKENLENS_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
+## Resources
 
-## Configure in GitHub Copilot CLI (`copilot mcp add`)
+Skills are MCP Resources at `skill://{id}` — agents can read them without tool calls.
 
-```bash
-copilot mcp add tokenlens \
-  --command "node /absolute/path/to/tokenlens/mcp-server/dist/index.js" \
-  --env TOKENLENS_ENDPOINT=http://localhost:8000 \
-  --env TOKENLENS_API_KEY=your-api-key
-```
+## Prompts
 
-Or with the global binary:
-
-```bash
-copilot mcp add tokenlens \
-  --command tokenlens-mcp \
-  --env TOKENLENS_ENDPOINT=http://localhost:8000 \
-  --env TOKENLENS_API_KEY=your-api-key
-```
-
-## Usage example (Claude Code)
-
-Once configured, ask Claude:
-
-```
-Search for "summarize" skills in the registry, then add the best one to my workspace.
-```
-
-Claude will call `search_skills`, present the results, then invoke `add_skill_to_workspace` to extract the tarball into your project directory.
+`suggest_skill_for_context(language, task_description)` returns top 3 skill suggestions filtered by language with estimated token savings.

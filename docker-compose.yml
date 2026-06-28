@@ -28,3 +28,20 @@ services:
     depends_on:
       server:
         condition: service_healthy
+
+  mcp:
+    build: ./mcp-server
+    ports:
+      - "${TOKENLENS_MCP_PORT:-8082}:8082"
+    environment:
+      TOKENLENS_ENDPOINT: "http://server:8080"
+      TOKENLENS_API_KEY: "${TOKENLENS_API_KEY:-}"
+      TOKENLENS_USER: "${TOKENLENS_USER:-}"
+      TOKENLENS_MCP_TRANSPORT: "http"
+      TOKENLENS_MCP_PORT: "8082"
+      TOKENLENS_MCP_TRACK_USAGE: "${TOKENLENS_MCP_TRACK_USAGE:-true}"
+    depends_on:
+      server:
+        condition: service_healthy
+    profiles:
+      - mcp
