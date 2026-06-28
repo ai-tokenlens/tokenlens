@@ -80,14 +80,57 @@ export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 # then use claude as usual
 ```
 
-> Verify the exact telemetry env vars against each tool's current docs; they're noted in `SPEC.md §4`.
+> Full per-OS setup (bash/zsh profile, macOS, Linux) in [`docs/otel-setup.md`](./docs/otel-setup.md).
 
 ### 3. Install the CLI
 ```bash
-npx @tokenlens/cli login --endpoint http://localhost:8080
+npm install -g @tokenlens/cli
+tklens login --endpoint http://localhost:8080 --api-key <your-key>
 tklens search mulesoft
 tklens add mulesoft-api-doc-generator --target=auto
 ```
+
+---
+
+## OTel setup verificato
+
+Variables confirmed against AGENT-04 implementation (`server/otel/receiver.py`, `server/otel/genai_mapper.py`):
+
+**GitHub Copilot CLI**
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:8080/otel` | TokenLens receiver |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | required |
+| `OTEL_SERVICE_NAME` | `copilot-cli` | identifies tool in dashboard |
+| `OTEL_RESOURCE_ATTRIBUTES` | `tokenlens.user=you@example.com` | maps to `user_id` in DB |
+
+**Claude Code**
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` | activates OTel export |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:8080/otel` | TokenLens receiver |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | required |
+| `OTEL_RESOURCE_ATTRIBUTES` | `tokenlens.user=you@example.com` | maps to `user_id` in DB |
+
+GenAI semantic convention attributes read by the mapper: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`. See [`docs/otel-setup.md`](./docs/otel-setup.md) for shell rc snippets.
+
+---
+
+## tklens CLI reference
+
+| Command | Arguments | Flags | Description |
+|---------|-----------|-------|-------------|
+| `tklens login` | — | `--endpoint URL` `--api-key KEY` | Save server credentials to `~/.tklens/config.json` |
+| `tklens whoami` | — | — | Print current user and endpoint |
+| `tklens search <query>` | `query` | `--tag TAG` `--sort rating\|efficiency\|popular\|new` | Search skill registry |
+| `tklens info <skillId>` | `skillId` | — | Show skill details and version history |
+| `tklens add <skillId>` | `skillId` | `--target auto\|claude-code\|copilot` | Download and materialize skill into cwd |
+| `tklens publish [path]` | `path` (default `.`) | — | Pack and upload skill from `skill.toml` |
+| `tklens pull <originUrl>` | `originUrl` | — | Pull-through proxy: fetch remote skill URL, cache locally |
+| `tklens rate <skillId>` | `skillId` | `--stars 1-5` `--comment TEXT` | Rate a skill |
+| `tklens collect` | — | `--tool copilot-cli\|claude-code` `--since ISO` `--output json` `--dry-run` | Fallback session-file collector (no OTel) |
+
+`add --target=auto` detects target from cwd: `.claude/` → `claude-code`, `.copilot/` → `copilot`, default `claude-code`.
 
 ---
 
