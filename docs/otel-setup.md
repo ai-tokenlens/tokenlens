@@ -181,3 +181,9 @@ curl http://localhost:8080/health
 ```
 
 Check the server logs for lines like `[otel] accepted N spans` to confirm ingest is working.
+
+---
+
+## MCP loop-back
+
+When using `add_skill_to_workspace` via the MCP server, the server automatically POSTs a `UsageEvent` to `POST /api/v1/events` (with `source="mcp"`, `tool="mcp"`, and `skill_id` set). No extra OTel or collector configuration is required — skill adoption appears in the dashboard immediately.

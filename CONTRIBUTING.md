@@ -70,6 +70,39 @@ npm test
 
 ---
 
+## Running mcp-server locally
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+**stdio** (default — used by Claude Code):
+```bash
+TOKENLENS_ENDPOINT=http://localhost:8080 node dist/index.js
+```
+
+**HTTP/SSE** (used by Copilot and remote agents):
+```bash
+TOKENLENS_MCP_TRANSPORT=http node dist/index.js
+# Server binds to 0.0.0.0:8082, MCP SSE endpoint at /sse
+```
+
+Set `TOKENLENS_API_KEY` and `TOKENLENS_USER` to enable auth'd tools (`rate_skill`, `publish_skill`) and usage loop-back.
+
+---
+
+## Adding a new MCP tool
+
+1. Create `mcp-server/src/tools/<toolName>.ts` — export a `definition` (MCP `Tool` schema) and a `handler(args, client)` async function.
+2. Register in `mcp-server/src/server.ts`: import and add to the `tools` array passed to `server.setRequestHandler`.
+3. If the tool needs auth, call `client.requireAuth()` (throws with a user-friendly message if `TOKENLENS_API_KEY` is unset).
+4. Write a test in `mcp-server/src/tests/<toolName>.test.ts` that stubs `apiClient` and asserts the handler output shape.
+5. Update the tools table in `README.md` and `docs/mcp-setup.md`.
+
+---
+
 ## Adding a tool collector (new OTel source)
 
 > Follow this when you want TokenLens to ingest data from a new AI coding tool (e.g., Cursor).

@@ -92,6 +92,27 @@ tklens add mulesoft-api-doc-generator --target=auto
 
 > For a full step-by-step guide, see [GETTING_STARTED.md](./GETTING_STARTED.md) · [GETTING_STARTED_EN.md](./GETTING_STARTED_EN.md)
 
+### 4. Enable MCP (optional)
+
+Expose the TokenLens registry and analytics to AI agents (Claude Code, Copilot, custom HTTP agents) via the MCP server.
+
+**Claude Code (stdio)**
+```bash
+tklens mcp-setup --apply
+# Writes the mcp entry to ~/.claude/claude_desktop_config.json
+tklens whoami   # verify credentials are picked up
+```
+
+**Copilot / remote HTTP agents (HTTP/SSE)**
+```bash
+tklens mcp-setup --transport=http --apply
+# Writes .copilot/mcp.json in the current workspace
+# Then start the MCP service:
+docker compose --profile mcp up
+```
+
+> Full setup guide (env vars, resources, prompts) in [`docs/mcp-setup.md`](./docs/mcp-setup.md).
+
 ---
 
 ## OTel setup verificato
@@ -169,14 +190,28 @@ Copilot CLI / Claude Code ──OTLP──► TokenLens Server ──► Postgre
                                     React dashboard
 ```
 
-| Component | Tech |
-|-----------|------|
-| Server | Python · FastAPI · SQLAlchemy |
-| CLI | Node · TypeScript · oclif |
-| Frontend | React · Vite · Tailwind · Recharts |
-| Storage | SQLite/Postgres + filesystem/S3 |
+| Component | Tech | Notes |
+|-----------|------|-------|
+| Server | Python · FastAPI · SQLAlchemy | REST API + OTel receiver · port 8080 |
+| CLI | Node · TypeScript · oclif | `tklens` binary |
+| Frontend | React · Vite · Tailwind · Recharts | Dashboard · port 3000 |
+| MCP Server | Node · `@modelcontextprotocol/sdk` | stdio + HTTP/SSE · port 8082 |
+| Storage | SQLite/Postgres + filesystem/S3 | |
 
 Full design in [`SPEC.md`](./SPEC.md).
+
+---
+
+## Tools available via MCP
+
+| Tool | Description | Auth required |
+|------|-------------|---------------|
+| `search_skills(query, tag?, sort?)` | Search the skill registry | No |
+| `get_skill(id)` | Full skill metadata + usage instructions | No |
+| `add_skill_to_workspace(id, target?, workspace_path?)` | Download + extract skill; records a UsageEvent | No |
+| `rate_skill(id, stars, comment?)` | Rate a skill | Yes |
+| `get_my_usage(from?, to?)` | Token totals for the configured user | No |
+| `publish_skill(skill_toml, payload_b64)` | Publish a new skill from agent context | Yes |
 
 ---
 
