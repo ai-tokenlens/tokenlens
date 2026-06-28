@@ -155,7 +155,7 @@ name    = "MuleSoft API Documentation Generator"
 summary = "Generate structured Markdown docs from a MuleSoft RAML/OAS spec"
 version = "1.0.0"
 tags    = ["mulesoft", "documentation", "raml", "oas", "api"]
-author  = "giuseppe@example.com"
+author  = "giuseppe.gortan@gmail.com"
 
 [usage]
 instructions = """
