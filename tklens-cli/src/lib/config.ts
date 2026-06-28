@@ -6,6 +6,7 @@ export interface Config {
   endpoint?: string;
   apiKey?: string;
   userId?: string;
+  mcpTransport?: 'stdio' | 'http';
 }
 
 const CONFIG_DIR = path.join(os.homedir(), '.tklens');
