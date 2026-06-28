@@ -1,4 +1,4 @@
-# ─────────────────────────────────────────────────────────────
+﻿# ─────────────────────────────────────────────────────────────
 # TokenLens — Setup script for Windows
 # Requires: PowerShell 5.1+ or PowerShell 7+
 # Run as: Right-click → "Run with PowerShell" 
