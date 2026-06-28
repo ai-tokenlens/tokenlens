@@ -164,8 +164,17 @@ Write-Ok "Dashboard     → http://localhost:3000"
 Write-Step "4 / 5 — Installing tklens CLI"
 # ══════════════════════════════════════════════════════════════
 
-npm install -g @tokenlens/cli
-if ($LASTEXITCODE -ne 0) { Write-Fail "npm install failed. Check your Node/npm installation." }
+$cliDir = Join-Path $PSScriptRoot "..\tklens-cli"
+$cliDir = (Resolve-Path $cliDir).Path
+Write-Info "Building tklens CLI from $cliDir ..."
+Push-Location $cliDir
+npm install
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Fail "npm install (deps) failed in tklens-cli." }
+npm run build
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Fail "npm run build failed in tklens-cli." }
+Pop-Location
+npm install -g $cliDir
+if ($LASTEXITCODE -ne 0) { Write-Fail "npm install -g failed. Check your Node/npm installation." }
 
 tklens login --endpoint "http://localhost:8080" --api-key $IngestToken
 Write-Ok "tklens CLI installed and logged in as $UserEmail"
