@@ -167,7 +167,7 @@ Write-Step "4 / 5 — Installing tklens CLI"
 npm install -g @tokenlens/cli
 if ($LASTEXITCODE -ne 0) { Write-Fail "npm install failed. Check your Node/npm installation." }
 
-tklens login --endpoint "http://localhost:8080" --api-key $IngestToken --user-id $UserEmail
+tklens login --endpoint "http://localhost:8080" --api-key $IngestToken
 Write-Ok "tklens CLI installed and logged in as $UserEmail"
 
 # ══════════════════════════════════════════════════════════════

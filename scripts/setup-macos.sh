@@ -143,7 +143,7 @@ step "4 / 5 — Installing tklens CLI"
 # ══════════════════════════════════════════════════════════════
 
 npm install -g @tokenlens/cli 2>/dev/null || npm install -g @tokenlens/cli
-tklens login --endpoint http://localhost:8080 --api-key "$INGEST_TOKEN" --user-id "$USER_EMAIL"
+tklens login --endpoint http://localhost:8080 --api-key "$INGEST_TOKEN"
 ok "tklens CLI installed and logged in as ${USER_EMAIL}"
 
 # ══════════════════════════════════════════════════════════════
