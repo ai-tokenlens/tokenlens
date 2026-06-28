@@ -1,6 +1,6 @@
 # TokenLens — Project Specification
-> **Version:** 0.2.0-draft
-> **Status:** MVP Spec — Ready for Agent Delegation
+> **Version:** 0.2.0
+> **Status:** v0.2 Spec — Ready for Agent Delegation
 > **License:** MIT
 > **Target tools (MVP):** GitHub Copilot CLI, Claude Code
 
@@ -36,10 +36,14 @@ There are existing tools focused purely on **token tracking** for Copilot (e.g. 
 ### Stretch (v0.1 if time permits)
 - [ ] Optional **MCP server** exposing the registry to agents conversationally
 
-### Non-Goals (v0.1)
+### v0.2 Goals
+- [ ] **MCP server — first-class**: both stdio and HTTP/SSE transports; full tool set + Resources + Prompts + token loop-back
+- [ ] Frontend stability: SkillBrowser focus bug fixed; `isFetching` opacity feedback
+
+### Non-Goals (v0.1 & v0.2)
 - Multi-tenant SaaS hosting
 - SSO; MVP auth is GitHub-token-based for collectors + API keys for publish
-- Cursor / Continue.dev collectors (deferred to v0.2)
+- Cursor / Continue.dev collectors (deferred to v0.3+)
 - Real-time streaming analytics (batch/periodic is fine)
 
 ---
@@ -77,7 +81,9 @@ There are existing tools focused purely on **token tracking** for Copilot (e.g. 
 │                      + blob store (skill payloads)            │
 │                                                                │
 │  ┌──────────────────────────────────────────────────────┐    │
-│  │   MCP Server (optional, stretch) → registry tools     │    │
+│  │   MCP Server (v0.2, first-class)                      │    │
+│  │   stdio | HTTP/SSE :8082                              │    │
+│  │   tools · resources · prompts · loop-back             │    │
 │  └──────────────────────────────────────────────────────┘    │
 └───────────────────────────┬────────────────────────────────────┘
                             │
@@ -94,7 +100,7 @@ There are existing tools focused purely on **token tracking** for Copilot (e.g. 
 | `server` | Python 3.11, FastAPI, SQLAlchemy 2.x, Alembic | OTel ingest + REST API (registry, analytics, recs) |
 | `tklens-cli` | Node 20, TypeScript, oclif | Low-token CLI: search/add/publish/pull |
 | `frontend` | React 18, Vite, Tailwind, Recharts, React Query | Dashboard + registry UI |
-| `mcp-server` | Node 20, `@modelcontextprotocol/sdk` (stretch) | Exposes registry to agents |
+| `mcp-server` | Node 20, `@modelcontextprotocol/sdk` | Exposes registry + analytics to agents (v0.2, first-class) |
 | `db` | SQLite (dev) / PostgreSQL (prod) | Persistence |
 | `storage` | Local filesystem (dev) / S3-compatible (prod) | Skill payload blobs |
 | infra | Docker Compose | One-command self-hosting |
@@ -340,6 +346,7 @@ tklens publish [path]                     # reads skill.toml, packs, uploads
 tklens pull <origin-url>                  # triggers pull-through proxy resolve
 tklens rate <skill-id> --stars N [--comment "..."]
 tklens collect [--tool=copilot-cli|claude-code]  # fallback session-file collector
+tklens mcp-setup [--transport=stdio|http]         # generates MCP config snippet for Claude Code / Copilot
 tklens whoami
 ```
 - `--target=auto` detects the local tool (presence of `.copilot/` or `.claude/`) and materializes accordingly.
@@ -384,10 +391,102 @@ frontend/
 ├── index.html · vite.config.js · tailwind.config.js · Dockerfile
 ```
 
-### 6.4 `mcp-server` (stretch)
-Exposes registry to agents so Claude Code / Copilot can query it conversationally.
-Tools: `search_skills`, `get_skill`, `add_skill_to_workspace`, `rate_skill`.
-Built on `@modelcontextprotocol/sdk`, talks to the same REST API. Documented as optional; **not required for MVP acceptance**.
+### 6.4 `mcp-server` (v0.2 — first-class)
+
+Exposes the full TokenLens registry and analytics to AI agents conversationally.
+Built on `@modelcontextprotocol/sdk`, talks to the same REST API as the CLI.
+
+**v0.2 is NOT a stretch goal** — it is a required deliverable with the same quality bar as any other module.
+
+#### Transports
+
+| Mode | Activation | Port |
+|------|-----------|------|
+| `stdio` (default) | `npx @tokenlens/mcp` or `node dist/index.js` | — |
+| `http/sse` | `TOKENLENS_MCP_TRANSPORT=http` | `8082` |
+
+HTTP/SSE mode binds to `0.0.0.0:8082` and exposes the standard MCP SSE endpoint at `/sse`. Both transports share the same tool/resource/prompt definitions.
+
+#### Configuration (env vars)
+```
+TOKENLENS_ENDPOINT=http://localhost:8080    # TokenLens server
+TOKENLENS_API_KEY=<key>                    # API key for auth'd operations
+TOKENLENS_USER=<email>                     # user identity for loop-back events
+TOKENLENS_MCP_TRANSPORT=stdio|http         # default: stdio
+TOKENLENS_MCP_TRACK_USAGE=true|false       # default: true — enable loop-back
+```
+
+#### MCP Tools (6 total)
+
+| Tool | Description | Auth required |
+|------|-------------|---------------|
+| `search_skills(query, tag?, sort?)` | `GET /api/v1/skills` — returns formatted list | No |
+| `get_skill(id)` | `GET /api/v1/skills/{id}` — full metadata + usage instructions | No |
+| `add_skill_to_workspace(id, target?, workspace_path?)` | Downloads + extracts tarball into `workspace_path` (default: cwd). **Records UsageEvent with `skill_id` if `TOKENLENS_MCP_TRACK_USAGE=true`** | No |
+| `rate_skill(id, stars, comment?)` | `POST /api/v1/skills/{id}/ratings` | Yes |
+| `get_my_usage(from?, to?)` | `GET /api/v1/analytics/summary?user_id=<TOKENLENS_USER>&from=&to=` — returns token totals for the configured user | No |
+| `publish_skill(skill_toml, payload_b64)` | `POST /api/v1/skills` — publish a new skill from agent context; `payload_b64` is a base64-encoded tarball | Yes |
+
+#### MCP Resources
+
+Skills are exposed as MCP Resources so agents can read them without tool calls:
+
+```
+skill://{id}           → text/plain: skill.toml content + usage instructions (Markdown)
+```
+
+The server must implement `resources/list` (returns all non-deleted skill IDs) and `resources/read`.
+
+#### MCP Prompts
+
+```
+suggest_skill_for_context(language, task_description)
+```
+Calls `GET /api/v1/recommendations/<TOKENLENS_USER>`, filters by language + task_description similarity, and returns a formatted prompt fragment listing the top 3 skill suggestions with estimated token savings.
+
+#### Token loop-back
+
+When `add_skill_to_workspace` is called with `TOKENLENS_MCP_TRACK_USAGE=true`:
+1. POST to `POST /api/v1/events` with:
+   - `user_id` = `TOKENLENS_USER`
+   - `tool` = `"mcp"`
+   - `skill_id` = the requested skill id
+   - `source` = `"mcp"`
+   - `input_tokens` / `output_tokens` = 0 (no LLM in loop; usage tracked at tool level)
+   - `timestamp` = now
+2. This closes the observability loop: skill adoption is visible in the dashboard.
+
+#### Distribution
+- `npx @tokenlens/mcp` — zero-install for Claude Code users
+- Optional service in `docker-compose.yml` (disabled by default, enabled via `--profile mcp`)
+- `tklens mcp-setup` command: auto-generates config snippets for Claude Code (`~/.claude/claude_desktop_config.json`) and Copilot (`.copilot/mcp.json`)
+
+#### Structure
+```
+mcp-server/
+├── src/
+│   ├── index.ts           # entry: stdio or http/sse based on env
+│   ├── server.ts          # MCP server definition (tools, resources, prompts)
+│   ├── transport/
+│   │   ├── stdio.ts
+│   │   └── http-sse.ts
+│   ├── tools/
+│   │   ├── searchSkills.ts
+│   │   ├── getSkill.ts
+│   │   ├── addSkillToWorkspace.ts
+│   │   ├── rateSkill.ts
+│   │   ├── getMyUsage.ts
+│   │   └── publishSkill.ts
+│   ├── resources/
+│   │   └── skillResource.ts
+│   ├── prompts/
+│   │   └── suggestSkill.ts
+│   ├── loopback.ts        # token event POST
+│   └── apiClient.ts       # thin wrapper around TOKENLENS_ENDPOINT
+├── package.json           # bin: { "tokenlens-mcp": "./dist/index.js" }
+├── tsconfig.json
+└── README.md              # setup for Claude Code + Copilot CLI
+```
 
 ---
 
@@ -493,13 +592,15 @@ Rules:
 
 ---
 
-## 10. Roadmap (post-MVP)
-| Version | Feature |
-|---------|---------|
-| v0.2 | Cursor + Continue.dev collectors |
-| v0.2 | MCP server promoted to first-class |
-| v0.3 | Slack/Teams daily digest + budget thresholds |
-| v0.3 | Per-user budget limits |
-| v0.4 | Skill dependency graph |
-| v0.5 | AI-assisted skill authoring ("describe → generate canonical skill") |
-| v1.0 | Public hosted community registry (opt-in federation) |
+## 10. Roadmap
+| Version | Feature | Status |
+|---------|---------|--------|
+| v0.1 | Core: OTel ingest, registry CRUD, CLI, dashboard | MVP |
+| v0.2 | MCP server first-class (stdio + HTTP/SSE, 6 tools, Resources, Prompts, loop-back) | **Current** |
+| v0.2 | Frontend stability (SkillBrowser focus fix) | **Current** |
+| v0.3 | Cursor + Continue.dev collectors | Planned |
+| v0.3 | Slack/Teams daily digest + budget thresholds | Planned |
+| v0.3 | Per-user budget limits | Planned |
+| v0.4 | Skill dependency graph | Planned |
+| v0.5 | AI-assisted skill authoring ("describe → generate canonical skill") | Planned |
+| v1.0 | Public hosted community registry (opt-in federation) | Planned |

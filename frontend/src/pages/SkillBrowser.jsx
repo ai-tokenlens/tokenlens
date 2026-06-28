@@ -10,7 +10,7 @@ export default function SkillBrowser() {
   const [sort, setSort] = useState('new')
   const [page, setPage] = useState(1)
 
-  const { data: skills, isLoading } = useSkills({ search: search || undefined, sort })
+  const { data: skills, isLoading, isFetching } = useSkills({ search: search || undefined, sort })
 
   const allTags = useMemo(() => {
     if (!skills) return []
@@ -36,8 +36,6 @@ export default function SkillBrowser() {
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
     )
   }
-
-  if (isLoading) return <p className="text-gray-500">Loading…</p>
 
   return (
     <div className="space-y-6">
@@ -82,10 +80,12 @@ export default function SkillBrowser() {
         </div>
       )}
 
-      {pageSlice.length === 0 ? (
+      {isLoading ? (
+        <p className="text-gray-500">Loading…</p>
+      ) : pageSlice.length === 0 ? (
         <p className="text-gray-400 text-sm">No skills found.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity ${isFetching ? 'opacity-60' : 'opacity-100'}`}>
           {pageSlice.map((skill) => (
             <SkillCard key={skill.id} skill={skill} />
           ))}

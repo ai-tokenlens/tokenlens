@@ -9,6 +9,7 @@ every turn.
 - Production-quality code, not stubs. Every business-logic unit gets a unit test.
 - If a decision isn't covered by the spec, pick the simplest reasonable option and leave a `# TODO(spec):` comment. Do not ask me unless truly blocked.
 - Only touch files in the module you were assigned. Do not refactor other modules.
+- **AGENTS.md is append-only.** NEVER edit or rewrite existing agent prompts. If a task evolves or supersedes a previous agent, add a new AGENT-N entry that references the old one. Existing agents are historical record — immutable.
 
 ## Token-efficiency rules (IMPORTANT)
 - Do NOT print large files back to me. Edit in place and summarize what changed in ≤3 lines.

@@ -73,6 +73,7 @@ export function useSkills({ tag, search, sort } = {}) {
       const { data } = await api.get('/skills', { params })
       return data
     },
+    placeholderData: (prev) => prev,
   })
 }
 

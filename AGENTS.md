@@ -321,21 +321,134 @@ Al termine: 3 righe di riepilogo, poi fermati.
 
 ---
 
-### AGENT-17 · MCP server (stretch — opzionale)
+### AGENT-17 · MCP server — first-class (v0.2)
 *Dipende da: AGENT-07 + AGENT-08 completati e committati*
 ```
-Implementa AGENT-17 di TokenLens (modulo opzionale — non richiesto per l'MVP).
-Leggi SPEC.md §6.4 (mcp-server).
-Crea `mcp-server/` con:
-- progetto Node 20 TypeScript che usa @modelcontextprotocol/sdk
-- tools esposti:
-  - search_skills(query, tag?, sort?): chiama GET /api/v1/skills e ritorna lista formattata
-  - get_skill(id): chiama GET /api/v1/skills/{id} e ritorna metadati + usage instructions
-  - add_skill_to_workspace(id, target?): chiama GET /api/v1/skills/{id}/download, estrae il tarball nella directory di lavoro corrente
-  - rate_skill(id, stars, comment?): chiama POST /api/v1/skills/{id}/ratings
-- Configurazione: legge TOKENLENS_ENDPOINT e TOKENLENS_API_KEY da env
-- README.md: come configurarlo in Claude Code (claude_desktop_config.json) e in Copilot CLI (copilot mcp add)
-- package.json con bin: { "tokenlens-mcp": "./dist/index.js" }
+Implementa AGENT-17 di TokenLens.
+Leggi SPEC.md §6.4 integralmente (mcp-server v0.2 — NON è opzionale, è first-class).
+
+Crea `mcp-server/` con la struttura esatta da spec (src/tools/, src/resources/, src/prompts/, src/transport/).
+
+TRANSPORT (src/transport/):
+- stdio.ts: usa StdioServerTransport da @modelcontextprotocol/sdk
+- http-sse.ts: usa SSEServerTransport; listen su TOKENLENS_MCP_PORT (default 8082); endpoint /sse
+- index.ts: branch su TOKENLENS_MCP_TRANSPORT=http → HTTP/SSE, altrimenti stdio
+
+TOOLS (6 — src/tools/):
+- searchSkills.ts: GET /api/v1/skills con params query/tag/sort; ritorna array formattato
+- getSkill.ts: GET /api/v1/skills/{id}; ritorna metadati + usage instructions
+- addSkillToWorkspace.ts: GET /api/v1/skills/{id}/download?target=<target>; estrae tarball in workspace_path (default process.cwd()); se TOKENLENS_MCP_TRACK_USAGE=true chiama loopback.ts
+- rateSkill.ts: POST /api/v1/skills/{id}/ratings {stars, comment?}; richiede TOKENLENS_API_KEY
+- getMyUsage.ts: GET /api/v1/analytics/summary?user_id=<TOKENLENS_USER>&from=&to=; ritorna totali
+- publishSkill.ts: accetta skill_toml (stringa) e payload_b64 (base64 tarball); POST /api/v1/skills; richiede TOKENLENS_API_KEY
+
+RESOURCES (src/resources/skillResource.ts):
+- resources/list: GET /api/v1/skills → array di {uri: "skill://{id}", name, mimeType: "text/plain"}
+- resources/read: GET /api/v1/skills/{id} → concatena manifest_toml + "\n\n" + description + usage
+
+PROMPTS (src/prompts/suggestSkill.ts):
+- prompt "suggest_skill_for_context": argomenti {language: string, task_description: string}
+- chiama GET /api/v1/recommendations/<TOKENLENS_USER>; filtra per language; ritorna top 3 come prompt template con estimated savings
+
+TOKEN LOOP-BACK (src/loopback.ts):
+- funzione trackUsage(skillId): POST /api/v1/events con {user_id: TOKENLENS_USER, tool: "mcp", skill_id, source: "mcp", input_tokens: 0, output_tokens: 0, timestamp: now()}
+- chiamata solo se TOKENLENS_MCP_TRACK_USAGE !== "false"
+
+CLI (aggiungi in tklens-cli/src/commands/mcp-setup.ts):
+- legge TOKENLENS_ENDPOINT e TOKENLENS_API_KEY dal config
+- con --transport=stdio (default): stampa snippet JSON per ~/.claude/claude_desktop_config.json
+- con --transport=http: stampa snippet per .copilot/mcp.json
+
+CONFIGURAZIONE DOCKER:
+- in docker-compose.yml aggiungi servizio `mcp` (profile: mcp) con le variabili d'ambiente da spec
+
+TESTS (src/__tests__/):
+- test per ogni tool con mock di apiClient (almeno 2 casi per tool: success + errore API)
+- test per resources/list e resources/read
+- test per loopback: verifica che POST /api/v1/events venga chiamato su addSkillToWorkspace
+- test per suggest_skill_for_context prompt
+
+package.json: bin: { "tokenlens-mcp": "./dist/index.js" }; dipendenze: @modelcontextprotocol/sdk, node-fetch o axios, tar-stream
+README.md: setup per Claude Code (claude_desktop_config.json), Copilot CLI (copilot mcp add), e HTTP/SSE mode per agent remoti
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
+
+## FASE v0.2 — MCP + Stabilità Frontend
+
+### AGENT-18 · tklens mcp-setup command
+*Dipende da: AGENT-17 completato e committato*
+```
+Implementa AGENT-18 di TokenLens.
+Leggi SPEC.md §6.2 (tklens-cli) e §6.4 (mcp-server — sezione Distribution).
+
+Nel modulo `tklens-cli/` aggiungi:
+- src/commands/mcp-setup.ts: comando che genera snippet di configurazione MCP
+  - --transport=stdio (default): genera JSON per ~/.claude/claude_desktop_config.json
+    ```json
+    {
+      "mcpServers": {
+        "tokenlens": {
+          "command": "npx",
+          "args": ["@tokenlens/mcp"],
+          "env": {
+            "TOKENLENS_ENDPOINT": "<endpoint>",
+            "TOKENLENS_API_KEY": "<apiKey>",
+            "TOKENLENS_USER": "<userId>"
+          }
+        }
+      }
+    }
+    ```
+  - --transport=http: genera JSON per .copilot/mcp.json con url: <endpoint>:8082/sse
+  - --apply: invece di stampare, scrive direttamente nel file di destinazione (con backup .bak)
+  - --show-current: mostra la config MCP esistente (se presente)
+
+Aggiorna src/lib/config.ts per includere il campo mcpTransport (stdio|http).
+
+Tests: tests/mcp-setup.test.ts — verifica che l'output JSON sia corretto per entrambi i transport.
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
+
+### AGENT-19 · Documentazione v0.2 — allineamento MCP
+*Dipende da: AGENT-17 + AGENT-18 completati e committati*
+```
+Implementa AGENT-19 di TokenLens.
+Leggi SPEC.md §6.4 (mcp-server v0.2) per conoscere l'implementazione reale prima di scrivere.
+
+Aggiorna i seguenti file esistenti — NON riscriverli, solo le sezioni indicate:
+
+README.md:
+- Sezione "Quickstart": aggiungi sotto-sezione "Enable MCP (optional)" con i passi:
+  1. `tklens mcp-setup --apply` per Claude Code (stdio)
+  2. `tklens mcp-setup --transport=http --apply` per Copilot / agent HTTP
+  3. verifica con `tklens whoami`
+- Sezione "Architecture": aggiorna la tabella dei componenti con mcp-server (porta 8082, HTTP/SSE)
+- Sezione "Tools available via MCP": tabella con i 6 tool (nome, descrizione breve, auth required)
+
+CONTRIBUTING.md:
+- Aggiungi sezione "Running mcp-server locally":
+  - `cd mcp-server && npm install && npm run build`
+  - stdio: `TOKENLENS_ENDPOINT=http://localhost:8080 node dist/index.js`
+  - HTTP/SSE: `TOKENLENS_MCP_TRANSPORT=http node dist/index.js`
+- Aggiungi sezione "Adding a new MCP tool": passi per aggiungere un tool in src/tools/, registrarlo in server.ts, scrivere il test
+
+docs/otel-setup.md:
+- Aggiungi nota in fondo: "MCP loop-back": quando si usa add_skill_to_workspace via MCP, il server registra automaticamente un UsageEvent — nessuna configurazione aggiuntiva richiesta.
+
+Crea da zero docs/mcp-setup.md:
+- Panoramica: cosa espone il server MCP (tool, resources, prompts)
+- Sezione "stdio (Claude Code)": configurazione claude_desktop_config.json, `tklens mcp-setup --apply`, verifica
+- Sezione "HTTP/SSE (Copilot, agent remoti)": avvio docker-compose --profile mcp, configurazione .copilot/mcp.json, `tklens mcp-setup --transport=http --apply`
+- Sezione "MCP Resources": come leggere una skill come risorsa (`skill://<id>`)
+- Sezione "MCP Prompts": come usare suggest_skill_for_context da Claude Code
+- Sezione "Token loop-back": spiegazione di come ogni add_skill_to_workspace genera un UsageEvent visibile nel dashboard
+- Sezione "Env vars reference": tabella di tutte le variabili TOKENLENS_MCP_*
 
 Al termine: 3 righe di riepilogo, poi fermati.
 ```
@@ -355,7 +468,10 @@ AGENT-04 ──► AGENT-05 ──► AGENT-06 ──► AGENT-07 ──► AGEN
 AGENT-09 ──► AGENT-10 ──► AGENT-11 ──► AGENT-12 ──► AGENT-13   ← Fase 3
     │
     ▼
-AGENT-14 ──► AGENT-15 ──► AGENT-16 ──► (AGENT-17)              ← Fase 4
+AGENT-14 ──► AGENT-15 ──► AGENT-16              ← Fase 4 (packaging v0.1)
+    │
+    ▼
+AGENT-17 ──► AGENT-18 ──► AGENT-19              ← Fase v0.2 (MCP first-class + docs)
 ```
 
 ## Checklist rapida pre-sessione
