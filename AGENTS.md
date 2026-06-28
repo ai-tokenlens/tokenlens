@@ -472,7 +472,211 @@ AGENT-14 ──► AGENT-15 ──► AGENT-16              ← Fase 4 (packagin
     │
     ▼
 AGENT-17 ──► AGENT-18 ──► AGENT-19              ← Fase v0.2 (MCP first-class + docs)
+    │
+    ▼
+AGENT-20 ──► AGENT-21 ──► AGENT-22 ──► AGENT-23 ← Fase v0.3 (auth + ops + collect daemon + dashboard)
 ```
+
+---
+
+## FASE v0.3 — Auth hardening, ops tooling, daemon collect, dashboard per-user
+
+### AGENT-20 · Auth hardening — login validation + API key lifecycle
+*Dipende da: AGENT-01 + AGENT-03 completati e committati*
+```
+Implementa AGENT-20 di TokenLens.
+Leggi server/config.py (settings.ingest_token), server/routers/events.py (_verify_token),
+tklens-cli/src/commands/login.ts e src/lib/apiClient.ts prima di scrivere qualsiasi riga.
+
+PROBLEMA NOTO: `tklens login --api-key=qualsiasi` ha sempre successo perché il comando
+salva la chiave senza verificarla contro il server. Analogamente, generare la chiave
+iniziale richiede accesso manuale al .env, non esiste un flusso guidato.
+
+SERVER — aggiungi in server/routers/auth.py (file nuovo):
+- GET /api/v1/auth/verify: richiede Authorization: Bearer <token>; chiama _verify_token
+  (stessa logica di events.py); risponde 200 {"valid": true, "user": "service"} oppure 401.
+  Non creare una tabella utenti separata: il token è unico e di servizio (settings.ingest_token).
+- POST /api/v1/admin/rotate-key (richiede il vecchio token): genera un nuovo token sicuro
+  (secrets.token_urlsafe(32)), aggiorna settings.ingest_token IN MEMORIA e riscrive il valore
+  in .env (riga INGEST_TOKEN=<nuovo>); risponde {"token": "<nuovo>"}. Logga il cambio.
+  NOTA: non usare pydantic-settings reload; sovrascrivere la riga in .env è sufficiente per
+  il prossimo riavvio; il token in-memory diventa attivo immediatamente.
+- Monta il router su main.py con prefix /api/v1.
+- tests/test_auth.py: verify con token valido → 200, con token errato → 401;
+  rotate-key sostituisce la riga in .env e il valore in settings (mock .env con tmp_path).
+
+CLI — modifica tklens-cli/src/commands/login.ts:
+- Dopo aver salvato endpoint + api-key in config, chiama GET /api/v1/auth/verify con il token.
+- Se 401: stampa errore "API key non valida. Controlla INGEST_TOKEN sul server." e cancella
+  la chiave appena salvata (writeConfig senza apiKey).
+- Se errore di rete (server non raggiungibile): stampa warning "Server non raggiungibile —
+  chiave salvata ma non verificata." e salva comunque (utile per setup offline).
+- Se 200: stampa "Autenticato su <endpoint>." (comportamento attuale ma solo dopo verifica).
+
+SCRIPT — crea scripts/generate-key.sh (bash) e scripts/generate-key.ps1 (PowerShell):
+- Genera un token sicuro (openssl rand -base64 32 | tr -d '=+/' | head -c 43 su bash;
+  [System.Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]
+  ::GetBytes(32)) su PowerShell).
+- Scrive o sostituisce la riga INGEST_TOKEN=<token> nel file .env nella directory corrente.
+- Stampa il token a schermo con un messaggio tipo:
+    ✔ INGEST_TOKEN generato e salvato in .env
+    Chiave: <token>
+    Conservala — non verrà mostrata di nuovo.
+- Gli script devono essere idempotenti: se INGEST_TOKEN esiste già in .env,
+  chiedono conferma (input y/n) prima di sovrascrivere.
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
+
+### AGENT-21 · Ops tooling — startup scripts + health check + onboarding nuovo utente
+*Dipende da: AGENT-14 + AGENT-20 completati e committati*
+```
+Implementa AGENT-21 di TokenLens.
+Leggi scripts/ (file esistenti), docker-compose.yml e server/main.py (GET /health)
+prima di scrivere qualsiasi file.
+
+OBIETTIVO: chiunque abbia Docker installato deve poter avviare l'infrastruttura con
+un singolo comando; un nuovo utente (senza Docker) deve poter configurare il client
+con un singolo script che non richiede accesso al server Docker.
+
+SCRIPT DI AVVIO SERVER — crea scripts/start-server.sh (bash) e scripts/start-server.ps1:
+- Verificano che docker e docker compose siano disponibili; se no, stampano istruzioni
+  e terminano con exit 1.
+- Verificano che .env esista; se no, copiano .env.example in .env e stampano avviso
+  "Configura INGEST_TOKEN in .env prima di continuare." e terminano.
+- Verificano che INGEST_TOKEN in .env non sia il valore di default "change-me";
+  se lo è, stampano "Esegui scripts/generate-key.sh prima di avviare." e terminano.
+- Eseguono: docker compose up -d --build
+- Polling di GET http://localhost:8080/health ogni 2 secondi, max 30 tentativi;
+  se dopo 30 tentativi il server non risponde 200, stampano i log (docker compose logs server)
+  e terminano con exit 1.
+- Se health OK: stampano "✔ TokenLens server attivo su http://localhost:8080" e il valore
+  mascherato di INGEST_TOKEN (prime 6 char + "…").
+
+SCRIPT ONBOARDING NUOVO UTENTE — crea scripts/new-user-setup.sh e scripts/new-user-setup.ps1:
+Questo script viene eseguito su una macchina che NON ospita il server.
+Chiede all'utente (via prompt interattivo):
+  1. URL del server TokenLens (default: http://localhost:8080)
+  2. API key (INGEST_TOKEN fornita dall'amministratore)
+Poi esegue in sequenza:
+  a. Verifica che node >= 20 sia installato; se no, stampa istruzioni e termina.
+  b. npm install -g @tokenlens/cli (o node tklens-cli/bin/run.js se in sviluppo locale:
+     controlla se tklens è già nel PATH prima di installare).
+  c. tklens login --endpoint=<url> --api-key=<key>
+     (dopo AGENT-20 questo verifica la chiave contro il server)
+  d. tklens collect --output=json 2>&1 | head -5  (dry-run per verificare che funzioni)
+  e. Stampa riepilogo:
+       ✔ tklens configurato per <url>
+       ✔ <N> eventi token trovati in locale (pronti per tklens collect)
+       Prossimo passo: aggiungi `tklens collect` al tuo crontab/Task Scheduler
+       oppure usa `tklens collect --daemon` (disponibile dopo AGENT-22).
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
+
+### AGENT-22 · Silent background collector — daemon + auto-schedule
+*Dipende da: AGENT-10 + AGENT-21 completati e committati*
+```
+Implementa AGENT-22 di TokenLens.
+Leggi tklens-cli/src/commands/collect.ts integralmente prima di scrivere.
+Il collect.ts attuale è batch/one-shot. L'obiettivo è aggiungere una modalità
+daemon che gira in background e invia i consumi senza intervento dell'utente.
+
+CLI — aggiungi flag a tklens-cli/src/commands/collect.ts:
+- --daemon: avvia un loop infinito con intervallo configurabile (default 15 minuti).
+  Ogni ciclo:
+    1. Legge il timestamp dell'ultimo invio da ~/.tklens/last-collect.json
+       {"timestamp": "<ISO>", "sent": <N>}
+    2. Chiama la logica esistente con --since=<timestamp ultimo invio>
+    3. Se trovati eventi: li invia via POST /api/v1/events/batch
+    4. Aggiorna last-collect.json con il nuovo timestamp e il totale inviato
+    5. Dorme per --interval=<minuti> (default 15, minimo 5)
+  Il processo scrive un PID file in ~/.tklens/collect.pid.
+  SIGTERM / SIGINT: cleanup PID file e uscita pulita.
+  Tutti gli errori (rete, auth) vengono loggati in ~/.tklens/collect.log senza
+  crashare il daemon; il ciclo riprende all'intervallo successivo.
+- --interval=<minuti>: solo con --daemon; default 15.
+- --stop: legge ~/.tklens/collect.pid e invia SIGTERM al processo; rimuove il PID file.
+- --status: stampa se il daemon è attivo (controlla PID file + kill -0) e quanti
+  eventi sono stati inviati nell'ultima sessione (da last-collect.json).
+
+CLI — aggiungi tklens-cli/src/commands/collect-schedule.ts (alias: tklens collect --schedule):
+- Su macOS/Linux: scrive una riga crontab (crontab -l + append) per eseguire
+  `tklens collect --since=$(date -d "20 minutes ago" --iso-8601=seconds)` ogni 20 minuti.
+  Stampa la riga crontab aggiunta e istruzioni per rimuoverla.
+- Su Windows: crea un Task Scheduler task via schtasks.exe con trigger "ogni 20 minuti",
+  action: `tklens collect`.
+  Stampa il nome del task creato (TokenLens-Collect) e istruzioni per rimuoverlo.
+- --unschedule: rimuove la crontab entry o il Task Scheduler task.
+
+Tests — tklens-cli/tests/collect-daemon.test.ts:
+- Mock di ApiClient.post; verifica che dopo N cicli simulati last-collect.json
+  contenga il timestamp aggiornato e il totale eventi cumulato.
+- Verifica che --stop invii SIGTERM al PID nel PID file.
+- Verifica che errori di rete nel ciclo non crashino il daemon (il ciclo continua).
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
+
+### AGENT-23 · Dashboard per-user — aggregazioni per utente + UserDetail analytics
+*Dipende da: AGENT-11 + AGENT-12 + AGENT-06 completati e committati*
+```
+Implementa AGENT-23 di TokenLens.
+Leggi frontend/src/pages/Dashboard.jsx, frontend/src/pages/UserDetail.jsx,
+frontend/src/api/client.js e server/routers/analytics.py prima di scrivere.
+
+OBIETTIVO: la Dashboard deve permettere di filtrare tutti i grafici per singolo utente
+e la pagina UserDetail deve mostrare le analytics complete di quell'utente.
+
+SERVER — nessuna modifica richiesta: /analytics/summary già supporta ?user_id=<id>
+e /analytics/top-consumers restituisce già il breakdown per utente.
+Verifica che /analytics/by-day accetti ?user_id= e lo passi al service (controlla
+analytics_service.get_by_day — se manca il filtro user_id, aggiungilo).
+
+FRONTEND — modifica frontend/src/api/client.js:
+- useByDay: aggiungi parametro userId; passa ?user_id=<userId> se presente.
+- useAnalyticsSummary: già accetta user_id; assicurati che il hook lo includa nei params.
+- Aggiungi useUsers(): GET /api/v1/users → lista di {id, created_at, event_count?};
+  se l'endpoint non esiste ancora, aggiungilo in server/routers/users.py:
+  GET /api/v1/users → lista di User dal DB, con join a UsageEvent per event_count.
+  Monta il router su main.py.
+
+FRONTEND — modifica frontend/src/pages/Dashboard.jsx:
+- Aggiungi un dropdown "Utente" sopra i KPI con opzione "Tutti gli utenti" (default)
+  più ogni userId distinto (dati da useUsers()).
+- Quando un utente è selezionato, passa userId a tutti gli hook
+  (useAnalyticsSummary, useByDay, TokenTrendChart, TopConsumersChart, ToolBreakdownPie).
+- I KPI mostrano i totali filtrati per quell'utente.
+- TopConsumersChart: se un utente è selezionato, mostra il breakdown per tool
+  (non per utente, perché stiamo già filtrando per utente).
+
+FRONTEND — modifica frontend/src/pages/UserDetail.jsx:
+- La pagina riceve l'userId dall'URL (route /users/:userId).
+- Mostra un header con l'userId e la data di primo evento.
+- Sezione "Consumi": monta TokenTrendChart filtrato per questo userId (ultimi 30 giorni).
+- Sezione "Top tool usati": BarChart orizzontale dei tool di questo utente
+  (usa useAnalyticsSummary({userId}) → by_tool).
+- Sezione "Riepilogo": KPI card con total_tokens, input_tokens, output_tokens,
+  cache_read_tokens dell'utente (ultimi 30 giorni e all-time).
+- RecommendationPanel già esistente (da AGENT-13): lascialo dov'è.
+- Aggiungi link "← Dashboard" in alto.
+
+FRONTEND — aggiungi link agli utenti da TopConsumersChart:
+- Ogni barra / riga di TopConsumersChart deve essere cliccabile e portare a /users/<userId>.
+
+Tests (opzionali ma graditi): se esistono test Vitest/RTL nel progetto, aggiungi
+un test per Dashboard che verifica che il dropdown utente filtri la query key di React Query.
+
+Al termine: 3 righe di riepilogo, poi fermati.
+```
+
+---
 
 ## Checklist rapida pre-sessione
 
