@@ -53,6 +53,17 @@ if ($env:OTEL_EXPORTER_OTLP_PROTOCOL -eq "http/json") {
   Write-Warn "OTEL_EXPORTER_OTLP_PROTOCOL is '$env:OTEL_EXPORTER_OTLP_PROTOCOL' (expected http/json) -> server cannot parse protobuf"
 }
 
+# MCP server (optional — only checked if the mcp profile container is running)
+$mcpRunning = docker compose ps --status running 2>$null | Select-String "mcp"
+if ($mcpRunning) {
+  try {
+    $r = Invoke-WebRequest -Uri "http://localhost:8082/sse" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+    Write-Ok "MCP server responding at http://localhost:8082/sse"
+  } catch { Write-Fail "MCP container running but port 8082 not responding -> check: docker compose logs mcp" }
+} else {
+  Write-Warn "MCP server not started (optional) -> run: .\scripts\mcp-setup.ps1 -Transport http"
+}
+
 # Summary
 Write-Host ""
 if ($errors -eq 0) { Write-Host "  All checks passed. TokenLens is ready!" -ForegroundColor Green }

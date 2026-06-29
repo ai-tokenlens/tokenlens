@@ -60,6 +60,28 @@ No need to re-run the full setup script — your `.env` and CLI config are prese
 
 ---
 
+## MCP server setup
+
+To activate the MCP integration (Claude Code / Copilot):
+
+```bash
+# stdio — Claude Code (macOS / Linux)
+bash scripts/mcp-setup.sh
+
+# stdio — Claude Code (Windows)
+.\scripts\mcp-setup.ps1
+
+# HTTP/SSE — Copilot or remote agents (macOS / Linux)
+bash scripts/mcp-setup.sh --transport=http
+
+# HTTP/SSE — Copilot or remote agents (Windows)
+.\scripts\mcp-setup.ps1 -Transport http
+```
+
+See [`docs/mcp-setup.md`](../docs/mcp-setup.md) for full details.
+
+---
+
 ## Key ports
 
 | Service | URL |
@@ -67,3 +89,4 @@ No need to re-run the full setup script — your `.env` and CLI config are prese
 | API / OTel receiver | `http://localhost:8080` |
 | Dashboard | `http://localhost:3000` |
 | Health check | `http://localhost:8080/health` |
+| MCP HTTP/SSE (optional) | `http://localhost:8082/sse` |

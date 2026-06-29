@@ -220,6 +220,8 @@ tklens collect-schedule            # crontab entry (macOS/Linux) or Task Schedul
 tklens collect-schedule --unschedule
 ```
 
+The terminal is freed immediately: `--daemon` re-spawns itself as a detached process and returns. On Windows, `collect-schedule` creates the Task Scheduler entry with `powershell -WindowStyle Hidden` so no console window ever appears.
+
 The daemon maintains three files in `~/.tklens/`:
 
 | File | Content |
@@ -271,6 +273,56 @@ tklens publish ./my-skill/
 ```
 
 The skill will immediately be available in the local registry for all team members.
+
+---
+
+## Step 11 — Activate the MCP server (AI agent integration)
+
+The MCP server exposes the skill registry and analytics to Claude Code and Copilot via the [Model Context Protocol](https://modelcontextprotocol.io).
+
+Exposed tools: `search_skills`, `get_skill`, `add_skill_to_workspace`, `rate_skill`, `publish_skill`, `get_my_usage` — plus `skill://<id>` resources and the `suggest_skill_for_context` prompt.
+
+### Option A — stdio (Claude Code, recommended)
+
+```bash
+# macOS / Linux
+bash scripts/mcp-setup.sh
+
+# Windows (PowerShell)
+.\scripts\mcp-setup.ps1
+```
+
+The script:
+1. Builds `mcp-server/` locally (`npm run build`)
+2. Writes the `tokenlens` entry into `~/.claude/claude_desktop_config.json` pointing to the local build
+3. Creates a `.bak` backup of any previous config
+
+**Next step:** restart Claude Code. The MCP server will start automatically as a child process managed by Claude Code.
+
+Verify the configuration:
+```bash
+tklens mcp-setup --show-current
+```
+
+### Option B — HTTP/SSE (Copilot, remote agents)
+
+```bash
+# macOS / Linux
+bash scripts/mcp-setup.sh --transport=http
+
+# Windows (PowerShell)
+.\scripts\mcp-setup.ps1 -Transport http
+```
+
+The script starts the `mcp` container via `docker compose --profile mcp up -d` (port 8082) and writes `.copilot/mcp.json` in the current directory.
+
+SSE endpoint: `http://localhost:8082/sse`
+
+### Removal
+
+To remove the MCP configuration from Claude Code, edit `~/.claude/claude_desktop_config.json` and delete the `tokenlens` block from `mcpServers`. For the HTTP container: `docker compose --profile mcp down`.
+
+> Full documentation (tools, resources, prompts, env vars): [`docs/mcp-setup.md`](./docs/mcp-setup.md)
 
 ---
 

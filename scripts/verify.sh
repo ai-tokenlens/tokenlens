@@ -74,6 +74,18 @@ else
   warn "OTEL_EXPORTER_OTLP_PROTOCOL is '${OTEL_EXPORTER_OTLP_PROTOCOL:-unset}' (expected http/json)  →  server cannot parse protobuf"
 fi
 
+# MCP server (optional — only checked if the mcp profile container is running)
+MCP_RUNNING=$(docker compose ps --status running 2>/dev/null | grep "mcp" || true)
+if [[ -n "$MCP_RUNNING" ]]; then
+  if curl -sf http://localhost:8082/sse &>/dev/null; then
+    ok "MCP server responding at http://localhost:8082/sse"
+  else
+    fail "MCP container running but port 8082 not responding  →  check: docker compose logs mcp"
+  fi
+else
+  warn "MCP server not started (optional)  →  run: bash scripts/mcp-setup.sh --transport=http"
+fi
+
 # Summary
 echo ""
 if [[ $ERRORS -eq 0 ]]; then
