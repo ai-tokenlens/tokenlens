@@ -33,9 +33,82 @@ Dovresti trovarti in una cartella che contiene `SPEC.md`, `docker-compose.yml` e
 
 ---
 
-## Passo 2 — Esegui lo script di setup automatico
+## Passo 2 — Genera la chiave di accesso (amministratore del server)
 
-Scegli il comando in base al tuo sistema operativo.
+> **Solo chi gestisce il server** esegue questo passo. Gli altri utenti del team ricevono la chiave dall'amministratore e saltano direttamente al [Passo 3b](#passo-3b--setup-per-un-nuovo-utente-senza-docker).
+
+```bash
+# macOS / Linux
+bash scripts/generate-key.sh
+
+# Windows (PowerShell)
+.\scripts\generate-key.ps1
+```
+
+Lo script genera un token sicuro, lo scrive in `.env` come `INGEST_TOKEN` e lo mostra a schermo **una sola volta**. Se `INGEST_TOKEN` esiste già, chiede conferma prima di sovrascrivere.
+
+Output atteso:
+```
+  ✔ INGEST_TOKEN generato e salvato in .env
+  Chiave: <token>
+  Conservala — non verrà mostrata di nuovo.
+```
+
+---
+
+## Passo 3 — Avvia il server
+
+```bash
+# macOS / Linux
+bash scripts/start-server.sh
+
+# Windows (PowerShell)
+.\scripts\start-server.ps1
+```
+
+Lo script verifica i prerequisiti (Docker installato, `.env` presente, `INGEST_TOKEN` non è il valore di default `change-me`), poi avvia Docker Compose e fa polling di `GET /health` ogni 2 secondi fino a conferma (max 30 tentativi).
+
+Output atteso:
+```
+  ✔ TokenLens server attivo su http://localhost:8080
+  Dashboard  →  http://localhost:3000
+```
+
+Se il server non parte entro 60 secondi, lo script stampa i log di Docker e termina con exit 1.
+
+---
+
+## Passo 3b — Setup per un nuovo utente (senza Docker)
+
+Se sei un membro del team e non ospiti il server, chiedi la chiave (`INGEST_TOKEN`) all'amministratore e usa lo script di onboarding:
+
+```bash
+# macOS / Linux
+bash scripts/new-user-setup.sh
+
+# Windows (PowerShell)
+.\scripts\new-user-setup.ps1
+```
+
+Lo script chiede:
+1. URL del server TokenLens (default: `http://localhost:8080`)
+2. API key fornita dall'amministratore
+
+Poi in sequenza: installa `tklens`, esegue `tklens login` (che verifica la chiave contro il server) e un dry-run di `tklens collect` per confermare che tutto funzioni.
+
+Output atteso:
+```
+  ✔ tklens configurato per http://<server>:8080
+  ✔ <N> eventi token trovati in locale (pronti per tklens collect)
+  Prossimo passo: aggiungi `tklens collect` al tuo crontab/Task Scheduler
+                  oppure usa `tklens collect --daemon`
+```
+
+---
+
+## Passo 4 — Esegui lo script di setup automatico (alternativa tutto-in-uno)
+
+Se preferisci un setup guidato che fa tutto quanto sopra in un unico comando, scegli in base al sistema operativo.
 
 ### macOS
 
@@ -82,7 +155,7 @@ Quando lo script termina vedrai questo messaggio:
 
 ---
 
-## Passo 3 — Apri un nuovo terminale
+## Passo 5 — Apri un nuovo terminale
 
 > ⚠️ **Importante.** Le variabili di ambiente per la raccolta token vengono caricate nel profilo della tua shell. Perché abbiano effetto, devi aprire un **nuovo** terminale (o una nuova finestra PowerShell su Windows).
 
@@ -93,7 +166,7 @@ source ~/.zshrc   # oppure: source ~/.bashrc
 
 ---
 
-## Passo 4 — Verifica che tutto funzioni
+## Passo 6 — Verifica che tutto funzioni
 
 ```bash
 bash scripts/verify.sh      # macOS e Linux
@@ -118,7 +191,7 @@ Se qualche voce mostra `[XX]`, il messaggio ti dice esattamente cosa fare.
 
 ---
 
-## Passo 5 — Usa i tuoi strumenti AI come al solito
+## Passo 7 — Usa i tuoi strumenti AI come al solito
 
 Da questo momento **non devi cambiare niente** nel tuo flusso di lavoro.
 
@@ -129,7 +202,35 @@ Dopo qualche interazione, apri il browser su [http://localhost:3000](http://loca
 
 ---
 
-## Passo 6 — Esplora il registry delle skill
+## Passo 8 — Raccolta dati automatica (daemon)
+
+Per non dover eseguire `tklens collect` a mano ogni volta, attiva la modalità daemon:
+
+```bash
+tklens collect --daemon            # avvia in background, ogni 15 minuti
+tklens collect --daemon --interval=30   # ogni 30 minuti
+tklens collect --status            # verifica se il daemon è attivo
+tklens collect --stop              # ferma il daemon
+```
+
+In alternativa, aggiungi una schedulazione permanente:
+
+```bash
+tklens collect-schedule            # crontab (macOS/Linux) o Task Scheduler (Windows)
+tklens collect-schedule --unschedule
+```
+
+Il daemon mantiene tre file in `~/.tklens/`:
+
+| File | Contenuto |
+|------|-----------|
+| `collect.pid` | PID del processo daemon; rimosso all'arresto |
+| `last-collect.json` | `{"timestamp": "<ISO>", "sent": <N>}` aggiornato ogni ciclo |
+| `collect.log` | Errori di rete/auth (il daemon non crasha, riprende al ciclo successivo) |
+
+---
+
+## Passo 9 — Esplora il registry delle skill
 
 Il registry include già tre skill pronte all'uso:
 
@@ -158,7 +259,7 @@ tklens add git-commit-message --target=auto
 
 ---
 
-## Passo 7 — Pubblica una tua skill
+## Passo 10 — Pubblica una tua skill
 
 Se hai un prompt o una istruzione personalizzata che funziona bene, condividila con il team:
 
@@ -279,6 +380,43 @@ docker compose up -d
 ```
 
 Il server sarà raggiungibile all'indirizzo IP della tua macchina sulla porta configurata (default 8080).
+
+---
+
+## Autenticazione e rotazione chiave
+
+`tklens login` verifica la chiave contro il server al momento del salvataggio. Se il server non è raggiungibile, la chiave viene salvata con avviso.
+
+**Rotare la chiave (amministratori):**
+
+```http
+POST /api/v1/admin/rotate-key
+Authorization: Bearer <vecchio-token>
+
+→ {"token": "<nuovo-token>"}
+```
+
+Il nuovo token è attivo immediatamente in memoria e viene scritto in `.env`. Aggiorna tutti gli utenti con la nuova chiave.
+
+**Verificare la chiave:**
+
+```http
+GET /api/v1/auth/verify
+Authorization: Bearer <token>
+
+→ 200 {"valid": true, "user": "service"}
+```
+
+---
+
+## Dashboard — filtro utente e pagina per utente
+
+Il dropdown **Utente** nella dashboard (`http://localhost:3000`) filtra tutti i grafici per un singolo utente. Le barre di TopConsumersChart sono cliccabili: portano a `/users/<userId>`.
+
+La pagina `/users/:userId` mostra:
+- **Consumi** — trend token ultimi 30 giorni per quell'utente
+- **Top tool usati** — breakdown per tool
+- **Riepilogo** — KPI cards: token totali, input, output, cache (ultimi 30 giorni e all-time)
 
 ---
 

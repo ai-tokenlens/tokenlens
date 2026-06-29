@@ -1,6 +1,9 @@
 $EnvFile = ".env"
 
-$bytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 32
+$rng.GetBytes($bytes)
+$rng.Dispose()
 $token = [System.Convert]::ToBase64String($bytes) -replace '[=+/]', ''
 $token = $token.Substring(0, [Math]::Min(43, $token.Length))
 
@@ -22,6 +25,6 @@ if ($exists) {
     Add-Content $EnvFile "`nINGEST_TOKEN=$token" -Encoding utf8
 }
 
-Write-Host "✔ INGEST_TOKEN generato e salvato in .env"
+Write-Host "[OK] INGEST_TOKEN generato e salvato in .env"
 Write-Host "Chiave: $token"
-Write-Host "Conservala — non verrà mostrata di nuovo."
+Write-Host "Conservala - non verra' mostrata di nuovo."

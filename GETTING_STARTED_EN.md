@@ -33,9 +33,82 @@ You should be in a folder containing `SPEC.md`, `docker-compose.yml`, and the `s
 
 ---
 
-## Step 2 — Run the automatic setup script
+## Step 2 — Generate the access key (server administrator)
 
-Choose the command for your operating system.
+> **Only the person managing the server** runs this step. Team members receive the key from the administrator and jump directly to [Step 3b](#step-3b--setup-for-a-new-user-without-docker).
+
+```bash
+# macOS / Linux
+bash scripts/generate-key.sh
+
+# Windows (PowerShell)
+.\scripts\generate-key.ps1
+```
+
+The script generates a secure token, writes it to `.env` as `INGEST_TOKEN`, and prints it **once**. If `INGEST_TOKEN` already exists, it asks for confirmation before overwriting.
+
+Expected output:
+```
+  ✔ INGEST_TOKEN generated and saved in .env
+  Key: <token>
+  Save it — it will not be shown again.
+```
+
+---
+
+## Step 3 — Start the server
+
+```bash
+# macOS / Linux
+bash scripts/start-server.sh
+
+# Windows (PowerShell)
+.\scripts\start-server.ps1
+```
+
+The script checks prerequisites (Docker installed, `.env` present, `INGEST_TOKEN` not the default `change-me`), then starts Docker Compose and polls `GET /health` every 2 seconds (up to 30 attempts).
+
+Expected output:
+```
+  ✔ TokenLens server running at http://localhost:8080
+  Dashboard  →  http://localhost:3000
+```
+
+If the server does not start within 60 seconds, the script prints Docker logs and exits with code 1.
+
+---
+
+## Step 3b — Setup for a new user (without Docker)
+
+If you are a team member and do not host the server, request the key (`INGEST_TOKEN`) from the administrator and use the onboarding script:
+
+```bash
+# macOS / Linux
+bash scripts/new-user-setup.sh
+
+# Windows (PowerShell)
+.\scripts\new-user-setup.ps1
+```
+
+The script asks:
+1. TokenLens server URL (default: `http://localhost:8080`)
+2. API key provided by the administrator
+
+It then: installs `tklens`, runs `tklens login` (which validates the key against the server), and performs a dry-run of `tklens collect` to confirm everything works.
+
+Expected output:
+```
+  ✔ tklens configured for http://<server>:8080
+  ✔ <N> token events found locally (ready for tklens collect)
+  Next step: add `tklens collect` to your crontab/Task Scheduler
+             or use `tklens collect --daemon`
+```
+
+---
+
+## Step 4 — Run the automatic setup script (all-in-one alternative)
+
+If you prefer a guided setup that does everything above in a single command, choose based on your operating system.
 
 ### macOS
 
@@ -82,7 +155,7 @@ When the script finishes you will see:
 
 ---
 
-## Step 3 — Open a new terminal
+## Step 5 — Open a new terminal
 
 > ⚠️ **Important.** The environment variables for token collection are loaded into your shell profile. For them to take effect, you must open a **new** terminal (or a new PowerShell window on Windows).
 
@@ -93,7 +166,7 @@ source ~/.zshrc   # or: source ~/.bashrc
 
 ---
 
-## Step 4 — Verify everything works
+## Step 6 — Verify everything works
 
 ```bash
 bash scripts/verify.sh      # macOS and Linux
@@ -118,7 +191,7 @@ If any item shows `[XX]`, the message tells you exactly what to do.
 
 ---
 
-## Step 5 — Use your AI tools as usual
+## Step 7 — Use your AI tools as usual
 
 From this point on **you don't need to change anything** in your workflow.
 
@@ -129,7 +202,35 @@ After a few interactions, open your browser at [http://localhost:3000](http://lo
 
 ---
 
-## Step 6 — Explore the skill registry
+## Step 8 — Automatic data collection (daemon)
+
+To avoid running `tklens collect` manually, activate daemon mode:
+
+```bash
+tklens collect --daemon            # runs in background every 15 minutes
+tklens collect --daemon --interval=30   # every 30 minutes
+tklens collect --status            # check if the daemon is running
+tklens collect --stop              # stop the daemon
+```
+
+Or set up a permanent schedule:
+
+```bash
+tklens collect-schedule            # crontab entry (macOS/Linux) or Task Scheduler task (Windows)
+tklens collect-schedule --unschedule
+```
+
+The daemon maintains three files in `~/.tklens/`:
+
+| File | Content |
+|------|---------|
+| `collect.pid` | Daemon process PID; removed on stop |
+| `last-collect.json` | `{"timestamp": "<ISO>", "sent": <N>}` updated each cycle |
+| `collect.log` | Network/auth errors (daemon does not crash; resumes on next cycle) |
+
+---
+
+## Step 9 — Explore the skill registry
 
 The registry already includes three ready-to-use skills:
 
@@ -158,7 +259,7 @@ tklens add git-commit-message --target=auto
 
 ---
 
-## Step 7 — Publish your own skill
+## Step 10 — Publish your own skill
 
 If you have a prompt or custom instruction that works well, share it with the team:
 
@@ -279,6 +380,43 @@ docker compose up -d
 ```
 
 The server will be reachable at your machine's IP address on the configured port (default 8080).
+
+---
+
+## Authentication and key rotation
+
+`tklens login` validates the key against the server at save time. If the server is unreachable, the key is saved with a warning.
+
+**Rotate the key (administrators):**
+
+```http
+POST /api/v1/admin/rotate-key
+Authorization: Bearer <old-token>
+
+→ {"token": "<new-token>"}
+```
+
+The new token is active immediately in memory and is written to `.env`. Distribute the new key to all users.
+
+**Verify a key:**
+
+```http
+GET /api/v1/auth/verify
+Authorization: Bearer <token>
+
+→ 200 {"valid": true, "user": "service"}
+```
+
+---
+
+## Dashboard — user filter and per-user page
+
+The **User** dropdown on the dashboard (`http://localhost:3000`) filters all charts for a specific user. The bars in TopConsumersChart are clickable: they navigate to `/users/<userId>`.
+
+The `/users/:userId` page shows:
+- **Usage** — token trend for the last 30 days for that user
+- **Top tools used** — tool breakdown bar chart
+- **Summary** — KPI cards: total tokens, input, output, cache (last 30 days and all-time)
 
 ---
 
