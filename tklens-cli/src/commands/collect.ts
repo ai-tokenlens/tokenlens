@@ -310,6 +310,7 @@ export default class Collect extends Command {
     status: Flags.boolean({
       description: 'Show daemon status and last collection stats',
     }),
+    '_child': Flags.boolean({ hidden: true }), // internal: marks re-spawned daemon child
   };
 
   async run(): Promise<void> {
@@ -357,6 +358,20 @@ export default class Collect extends Command {
     if (flags.daemon) {
       const intervalMinutes = flags.interval ?? 15;
       if (intervalMinutes < 5) this.error('--interval minimum is 5 minutes.');
+
+      // If not the detached child, re-spawn self in the background and exit
+      if (!flags['_child']) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { spawn } = require('child_process') as typeof import('child_process');
+        const child = spawn(process.argv[0], [...process.argv.slice(1), '--_child'], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        });
+        child.unref();
+        this.log(`Daemon avviato in background (PID ${child.pid}). Log: ${path.join(tklensDir, 'collect.log')}`);
+        return;
+      }
 
       const tools: string[] = [];
       if (flags.tool) {

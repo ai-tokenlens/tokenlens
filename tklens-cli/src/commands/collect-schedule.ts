@@ -37,8 +37,9 @@ export default class CollectSchedule extends Command {
       }
     } else {
       try {
+        // /WindowStyle HIDDEN non esiste in schtasks; usiamo powershell per nascondere la finestra
         execSync(
-          `schtasks /Create /TN "${TASK_NAME}" /TR "tklens collect" /SC MINUTE /MO 20 /F`,
+          `schtasks /Create /TN "${TASK_NAME}" /TR "powershell -WindowStyle Hidden -NonInteractive -Command \\"tklens collect\\"" /SC MINUTE /MO 20 /F`,
           { stdio: 'pipe' },
         );
         this.log(`Created Task Scheduler task: ${TASK_NAME}`);
