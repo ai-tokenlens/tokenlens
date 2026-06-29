@@ -29,3 +29,4 @@ every turn.
 1. Code compiles / app boots.
 2. Tests for the new logic pass.
 3. A ≤3 line summary of what changed and any TODO left behind.
+4. **Documentation updated.** Se il task introduce o modifica endpoint API, comandi CLI, script ops, o pagine frontend visibili all'utente, aggiorna README.md, GETTING_STARTED.md e/o SPEC.md nella stessa sessione. Non delegare la documentazione a un agent successivo a meno che il task sia esplicitamente classificato come "solo codice". Se non sai quale file aggiornare, usa README.md come default.

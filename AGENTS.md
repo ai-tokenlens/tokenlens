@@ -678,6 +678,117 @@ Al termine: 3 righe di riepilogo, poi fermati.
 
 ---
 
+### AGENT-24 · Documentazione v0.3 — auth, ops tooling, daemon collector, dashboard per-user
+*Dipende da: AGENT-20 + AGENT-21 + AGENT-22 + AGENT-23 completati e committati*
+*Estende: AGENT-19 (documentazione v0.2)*
+```
+Implementa AGENT-24 di TokenLens.
+Leggi README.md, GETTING_STARTED.md, GETTING_STARTED_EN.md e SPEC.md
+(sezioni Authentication, Ops, CLI, Frontend) prima di scrivere qualsiasi cosa.
+NON toccare AGENTS.md, CLAUDE.md, CONTRIBUTING.md o file di codice.
+
+OBIETTIVO: allineare tutta la documentazione utente alle feature introdotte in
+AGENT-20 (auth hardening), AGENT-21 (ops tooling), AGENT-22 (daemon collector)
+e AGENT-23 (dashboard per-user).
+
+── README.md ──────────────────────────────────────────────────────────────────
+Aggiorna le sezioni:
+
+1. "Quick start" / "Getting started":
+   - Sostituisci il passo manuale "imposta INGEST_TOKEN in .env" con:
+       ```bash
+       bash scripts/generate-key.sh   # oppure scripts/generate-key.ps1 su Windows
+       bash scripts/start-server.sh   # oppure scripts/start-server.ps1
+       ```
+   - Rimuovi qualsiasi riferimento a impostare la chiave a mano nel .env.
+
+2. "CLI usage" / "Raccolta dati":
+   - Aggiungi sotto-sezione "Modalità daemon":
+       ```bash
+       tklens collect --daemon            # avvia in background, ogni 15 minuti
+       tklens collect --daemon --interval=30
+       tklens collect --status            # verifica se il daemon è attivo
+       tklens collect --stop              # ferma il daemon
+       ```
+   - Aggiungi sotto-sezione "Schedulazione automatica":
+       ```bash
+       tklens collect-schedule            # aggiunge crontab entry (macOS/Linux)
+                                          # o Task Scheduler task (Windows)
+       tklens collect-schedule --unschedule
+       ```
+
+3. "Authentication" (crea se non esiste):
+   - Spiega che `tklens login` verifica la chiave contro il server al momento del salvataggio.
+   - Documenta il flusso di rotazione chiave:
+       POST /api/v1/admin/rotate-key   Authorization: Bearer <vecchio-token>
+       Risposta: {"token": "<nuovo>"}
+   - Documenta GET /api/v1/auth/verify per health-check dell'autenticazione.
+
+4. "Dashboard":
+   - Aggiungi nota: il dropdown "Utente" filtra tutti i grafici per utente specifico.
+   - Documenta la pagina /users/:userId con le sezioni Consumi, Top tool, Riepilogo.
+   - Spiega che le barre in TopConsumersChart sono cliccabili e portano a /users/<id>.
+
+── GETTING_STARTED.md (e GETTING_STARTED_EN.md) ──────────────────────────────
+Aggiorna i passi di setup per un nuovo utente:
+
+Passo 1 — Avvio server (amministratore):
+  ```bash
+  bash scripts/generate-key.sh    # genera INGEST_TOKEN in .env
+  bash scripts/start-server.sh    # avvia Docker Compose + health check
+  ```
+  Copia e distribuisci il valore di INGEST_TOKEN stampato a schermo.
+
+Passo 2 — Setup client (nuovo utente, senza Docker):
+  ```bash
+  bash scripts/new-user-setup.sh  # oppure new-user-setup.ps1 su Windows
+  # chiede: URL server + API key
+  # installa tklens-cli, esegue login verificato, dry-run collect
+  ```
+
+Passo 3 — Raccolta continua:
+  ```bash
+  tklens collect --daemon         # avvia raccolta in background
+  # oppure
+  tklens collect-schedule         # configura crontab/Task Scheduler
+  ```
+
+Mantieni la struttura esistente; aggiungi o aggiorna solo i passi interessati.
+Aggiorna anche GETTING_STARTED_EN.md con le stesse modifiche in inglese.
+
+── SPEC.md ────────────────────────────────────────────────────────────────────
+Aggiungi o aggiorna le sezioni seguenti (usa headings già esistenti se presenti):
+
+1. Authentication:
+   - GET /api/v1/auth/verify — descrizione, request/response schema.
+   - POST /api/v1/admin/rotate-key — descrizione, request/response schema,
+     comportamento in-memory vs .env.
+
+2. CLI commands:
+   - `collect --daemon`, `--interval`, `--stop`, `--status`: descrizione e flag.
+   - `collect-schedule` / `collect-schedule --unschedule`: descrizione e comportamento
+     per macOS/Linux (crontab) e Windows (schtasks).
+   - File di stato: ~/.tklens/collect.pid, ~/.tklens/last-collect.json,
+     ~/.tklens/collect.log — schema e utilizzo.
+
+3. Frontend routes:
+   - /users/:userId — UserDetail: layout, sezioni, dati mostrati.
+   - Dashboard — filtro utente: dropdown, comportamento, TopConsumersChart cliccabile.
+
+4. Ops scripts (aggiungi se sezione manca):
+   - scripts/generate-key.sh / .ps1 — scopo, idempotenza, output.
+   - scripts/start-server.sh / .ps1 — prereq, health-check polling, exit code.
+   - scripts/new-user-setup.sh / .ps1 — flusso interattivo, dry-run collect.
+
+Diagramma fase v0.3 (aggiorna il diagramma delle fasi se presente in SPEC.md):
+  AGENT-20 ──► AGENT-21 ──► AGENT-22 ──► AGENT-23 ──► AGENT-24
+  (auth)       (ops)        (daemon)      (dashboard)   (docs v0.3)
+
+Al termine: 3 righe di riepilogo di cosa è cambiato in ogni file, poi fermati.
+```
+
+---
+
 ## Checklist rapida pre-sessione
 
 Prima di ogni sessione:
