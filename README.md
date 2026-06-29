@@ -55,8 +55,8 @@ Usage data feeds a **recommendation engine** that points you at the registry ski
 ```bash
 git clone https://github.com/<you>/tokenlens.git
 cd tokenlens
-bash scripts/generate-key.sh   # genera INGEST_TOKEN in .env (oppure scripts/generate-key.ps1 su Windows)
-bash scripts/start-server.sh   # avvia Docker Compose + health check (oppure scripts/start-server.ps1)
+bash scripts/generate-key.sh   # generates INGEST_TOKEN in .env (Windows: scripts/generate-key.ps1)
+bash scripts/start-server.sh   # starts Docker Compose + health check (Windows: scripts/start-server.ps1)
 ```
 - Dashboard → http://localhost:3000
 - API → http://localhost:8080
@@ -89,7 +89,7 @@ export OTEL_RESOURCE_ATTRIBUTES="tokenlens.user=you@example.com"
 ```bash
 npm install -g @tokenlens/cli
 tklens login --endpoint http://localhost:8080 --api-key <your-key>
-# login verifica la chiave contro il server; in caso di server offline salva comunque con avviso
+# verifies the key against the server; saves with a warning if the server is unreachable
 tklens search mulesoft
 tklens add mulesoft-api-doc-generator --target=auto
 ```
@@ -119,7 +119,7 @@ docker compose --profile mcp up
 
 ---
 
-## OTel setup verificato
+## OTel setup reference
 
 Variables confirmed against AGENT-04 implementation (`server/otel/receiver.py`, `server/otel/genai_mapper.py`):
 
@@ -128,7 +128,7 @@ Variables confirmed against AGENT-04 implementation (`server/otel/receiver.py`, 
 |----------|-------|-------|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:8080/otel` | TokenLens receiver |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` | server parses JSON; protobuf not supported |
-| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Bearer <token>` | INGEST_TOKEN dal .env |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Bearer <token>` | INGEST_TOKEN from .env |
 | `OTEL_SERVICE_NAME` | `copilot-cli` | identifies tool in dashboard |
 | `OTEL_RESOURCE_ATTRIBUTES` | `tokenlens.user=you@example.com` | maps to `user_id` in DB |
 
@@ -138,7 +138,7 @@ Variables confirmed against AGENT-04 implementation (`server/otel/receiver.py`, 
 | `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` | activates OTel export |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:8080/otel` | TokenLens receiver |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/json` | server parses JSON; protobuf not supported |
-| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Bearer <token>` | INGEST_TOKEN dal .env |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Bearer <token>` | INGEST_TOKEN from .env |
 | `OTEL_RESOURCE_ATTRIBUTES` | `tokenlens.user=you@example.com` | maps to `user_id` in DB |
 
 GenAI semantic convention attributes read by the mapper: `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.request.model`. See [`docs/otel-setup.md`](./docs/otel-setup.md) for shell rc snippets.
@@ -158,67 +158,67 @@ GenAI semantic convention attributes read by the mapper: `gen_ai.usage.input_tok
 | `tklens pull <originUrl>` | `originUrl` | — | Pull-through proxy: fetch remote skill URL, cache locally |
 | `tklens rate <skillId>` | `skillId` | `--stars 1-5` `--comment TEXT` | Rate a skill |
 | `tklens collect` | — | `--tool copilot-cli\|claude-code` `--since ISO` `--output json` `--dry-run` | Fallback session-file collector (no OTel) |
-| `tklens collect` | — | `--daemon` `--interval=MIN` | Avvia il collector in background (ogni 15 min di default) |
-| `tklens collect` | — | `--status` | Verifica se il daemon è attivo |
-| `tklens collect` | — | `--stop` | Ferma il daemon in background |
-| `tklens collect-schedule` | — | — | Aggiunge crontab entry (macOS/Linux) o Task Scheduler task (Windows) |
-| `tklens collect-schedule` | — | `--unschedule` | Rimuove la schedulazione |
+| `tklens collect` | — | `--daemon` `--interval=MIN` | Start collector in background (default every 15 min) |
+| `tklens collect` | — | `--status` | Check if the daemon is running |
+| `tklens collect` | — | `--stop` | Stop the background daemon |
+| `tklens collect-schedule` | — | — | Add crontab entry (macOS/Linux) or Task Scheduler task (Windows) |
+| `tklens collect-schedule` | — | `--unschedule` | Remove the schedule |
 
 `add --target=auto` detects target from cwd: `.claude/` → `claude-code`, `.copilot/` → `copilot`, default `claude-code`.
 
-### Modalità daemon
+### Daemon mode
 
 ```bash
-tklens collect --daemon            # avvia in background, ogni 15 minuti
+tklens collect --daemon            # start in background, every 15 minutes
 tklens collect --daemon --interval=30
-tklens collect --status            # verifica se il daemon è attivo
-tklens collect --stop              # ferma il daemon
+tklens collect --status            # check whether the daemon is running
+tklens collect --stop              # stop the daemon
 ```
 
-Il daemon scrive:
-- `~/.tklens/collect.pid` — PID del processo; rimosso all'arresto
-- `~/.tklens/last-collect.json` — `{"timestamp": "<ISO>", "sent": <N>}` aggiornato ogni ciclo
-- `~/.tklens/collect.log` — errori di rete/auth (il daemon non crasha, riprende al ciclo successivo)
+The daemon writes:
+- `~/.tklens/collect.pid` — process PID; removed on stop
+- `~/.tklens/last-collect.json` — `{"timestamp": "<ISO>", "sent": <N>}` updated each cycle
+- `~/.tklens/collect.log` — network/auth errors (daemon never crashes; resumes on next cycle)
 
-### Schedulazione automatica
+### Automatic scheduling
 
 ```bash
-tklens collect-schedule            # aggiunge crontab entry (macOS/Linux)
-                                   # o Task Scheduler task (Windows, nome: TokenLens-Collect)
+tklens collect-schedule            # add crontab entry (macOS/Linux)
+                                   # or Task Scheduler task (Windows, name: TokenLens-Collect)
 tklens collect-schedule --unschedule
 ```
 
-Su Windows lo script usa `schtasks.exe`; su macOS/Linux modifica il crontab dell'utente corrente.
+On Windows uses `schtasks.exe`; on macOS/Linux edits the current user's crontab.
 
 ---
 
 ## Authentication
 
-### Login e verifica chiave
+### Login and key verification
 
-`tklens login --endpoint <URL> --api-key <key>` verifica la chiave contro il server prima di salvarla (`GET /api/v1/auth/verify`). Se il server non è raggiungibile, la chiave viene salvata con avviso "server non raggiungibile".
+`tklens login --endpoint <URL> --api-key <key>` verifies the key against the server before saving it (`GET /api/v1/auth/verify`). If the server is unreachable, the key is saved with a warning.
 
 ```bash
 tklens login --endpoint http://localhost:8080 --api-key <your-key>
-# ✔ Autenticato su http://localhost:8080.
+# ✔ Authenticated at http://localhost:8080.
 ```
 
-### Rotazione della chiave (amministratori)
+### Key rotation (administrators)
 
 ```http
 POST /api/v1/admin/rotate-key
-Authorization: Bearer <vecchio-token>
+Authorization: Bearer <old-token>
 
-→ 200 {"token": "<nuovo-token>"}
+→ 200 {"token": "<new-token>"}
 ```
 
-Il nuovo token è attivo immediatamente in memoria; viene anche scritto nella riga `INGEST_TOKEN` del file `.env` per sopravvivere ai riavvii. Dopo la rotazione aggiorna la CLI:
+The new token is active immediately in memory and is also written to the `INGEST_TOKEN` line in `.env` to survive restarts. After rotation, update the CLI:
 
 ```bash
-tklens login --endpoint http://localhost:8080 --api-key <nuovo-token>
+tklens login --endpoint http://localhost:8080 --api-key <new-token>
 ```
 
-### Health-check autenticazione
+### Authentication health check
 
 ```http
 GET /api/v1/auth/verify
@@ -232,35 +232,36 @@ Authorization: Bearer <token>
 
 ## Ops scripts
 
-| Script | Piattaforma | Scopo |
-|--------|-------------|-------|
-| `scripts/generate-key.sh` / `.ps1` | bash / PowerShell | Genera `INGEST_TOKEN` sicuro e lo scrive in `.env`; chiede conferma se la chiave esiste già |
-| `scripts/start-server.sh` / `.ps1` | bash / PowerShell | Verifica prerequisiti, avvia Docker Compose, poll health ogni 2s (max 30 tentativi) |
-| `scripts/new-user-setup.sh` / `.ps1` | bash / PowerShell | Setup interattivo per un nuovo utente senza accesso al server Docker (installa CLI, login, dry-run collect) |
+| Script | Platform | Purpose |
+|--------|----------|---------|
+| `scripts/generate-key.sh` / `.ps1` | bash / PowerShell | Generate a secure `INGEST_TOKEN` and write it to `.env`; prompts for confirmation if key already exists |
+| `scripts/start-server.sh` / `.ps1` | bash / PowerShell | Check prerequisites, start Docker Compose, poll health every 2s (max 30 attempts) |
+| `scripts/new-user-setup.sh` / `.ps1` | bash / PowerShell | Interactive setup for a new user without Docker server access (installs CLI, login, dry-run collect) |
+| `scripts/mcp-setup.sh` / `.ps1` | bash / PowerShell | Build mcp-server and write MCP config for Claude Code (stdio) or start Docker MCP container (http) |
 
 ---
 
 ## Dashboard
 
-La dashboard principale (`/`) mostra token trends, top consumers e breakdown per tool/modello.
+The main dashboard (`/`) shows token trends, top consumers, and breakdown by tool/model.
 
-### Filtro per utente
+### User filter
 
-Il dropdown **Utente** in alto a destra filtra tutti i grafici (TokenTrendChart, ToolBreakdownPie, AnalyticsSummary) per un singolo utente. Selezionare "Tutti" riporta alla vista globale.
+The **User** dropdown filters all charts (TokenTrendChart, ToolBreakdownPie, AnalyticsSummary) to a single user. Selecting "All" returns to the global view.
 
-Le barre di **TopConsumersChart** sono cliccabili: cliccando su un utente si naviga direttamente a `/users/<userId>`.
+Bars in **TopConsumersChart** are clickable and navigate directly to `/users/<userId>`.
 
-### Pagina utente (`/users/:userId`)
+### User detail page (`/users/:userId`)
 
-La pagina `UserDetail` mostra tre sezioni:
+The `UserDetail` page shows three sections:
 
-| Sezione | Contenuto |
-|---------|-----------|
-| **Consumi** | TokenTrendChart degli ultimi 30 giorni, filtrato per questo utente |
-| **Top tool usati** | BarChart orizzontale dei tool di questo utente (da `by_tool`) |
-| **Riepilogo** | KPI cards: `total_tokens`, `input_tokens`, `output_tokens`, `cache_read_tokens` (ultimi 30 giorni e all-time) |
+| Section | Content |
+|---------|---------|
+| **Consumption** | TokenTrendChart for the last 30 days, filtered to this user |
+| **Top tools used** | Horizontal BarChart of tools used by this user (from `by_tool`) |
+| **Summary** | KPI cards: `total_tokens`, `input_tokens`, `output_tokens`, `cache_read_tokens` (last 30 days and all-time) |
 
-Un link "← Dashboard" in alto riporta alla vista globale.
+A "← Dashboard" link at the top returns to the global view.
 
 ---
 
