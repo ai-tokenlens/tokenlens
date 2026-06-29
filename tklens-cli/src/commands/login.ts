@@ -1,5 +1,6 @@
 import { Command, Flags } from '@oclif/core';
 import { readConfig, writeConfig } from '../lib/config';
+import { ApiClient, ApiError } from '../lib/apiClient';
 
 export default class Login extends Command {
   static description = 'Authenticate with a TokenLens server';
@@ -22,6 +23,20 @@ export default class Login extends Command {
     config.endpoint = flags.endpoint;
     config.apiKey = flags['api-key'];
     writeConfig(config);
-    this.log(`Logged in to ${flags.endpoint}`);
+
+    try {
+      const client = new ApiClient(flags.endpoint, flags['api-key']);
+      await client.get<{ valid: boolean }>('/api/v1/auth/verify');
+      this.log(`Autenticato su ${flags.endpoint}.`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        const cfg = readConfig();
+        delete cfg.apiKey;
+        writeConfig(cfg);
+        this.error('API key non valida. Controlla INGEST_TOKEN sul server.');
+      } else {
+        this.warn('Server non raggiungibile — chiave salvata ma non verificata.');
+      }
+    }
   }
 }
