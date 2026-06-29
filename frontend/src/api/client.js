@@ -7,26 +7,28 @@ export const api = axios.create({
 
 // --- Analytics hooks ---
 
-export function useAnalyticsSummary({ from, to } = {}) {
+export function useAnalyticsSummary({ from, to, userId } = {}) {
   return useQuery({
-    queryKey: ['analytics', 'summary', from, to],
+    queryKey: ['analytics', 'summary', from, to, userId],
     queryFn: async () => {
       const params = {}
       if (from) params.from = from
       if (to) params.to = to
+      if (userId) params.user_id = userId
       const { data } = await api.get('/analytics/summary', { params })
       return data
     },
   })
 }
 
-export function useByDay({ from, to } = {}) {
+export function useByDay({ from, to, userId } = {}) {
   return useQuery({
-    queryKey: ['analytics', 'by-day', from, to],
+    queryKey: ['analytics', 'by-day', from, to, userId],
     queryFn: async () => {
       const params = {}
       if (from) params.from = from
       if (to) params.to = to
+      if (userId) params.user_id = userId
       const { data } = await api.get('/analytics/by-day', { params })
       return data.days
     },
@@ -47,15 +49,26 @@ export function useTopConsumers({ limit = 10, from, to } = {}) {
 }
 
 // Reuses /analytics/summary – by_tool gives tool→total_tokens breakdown
-export function useToolBreakdown({ from, to } = {}) {
+export function useToolBreakdown({ from, to, userId } = {}) {
   return useQuery({
-    queryKey: ['analytics', 'tool-breakdown', from, to],
+    queryKey: ['analytics', 'tool-breakdown', from, to, userId],
     queryFn: async () => {
       const params = {}
       if (from) params.from = from
       if (to) params.to = to
+      if (userId) params.user_id = userId
       const { data } = await api.get('/analytics/summary', { params })
       return data.by_tool
+    },
+  })
+}
+
+export function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const { data } = await api.get('/users')
+      return data
     },
   })
 }

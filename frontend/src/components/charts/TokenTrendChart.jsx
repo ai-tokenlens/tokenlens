@@ -16,10 +16,10 @@ function rangeFor(days) {
   return { from: toDateStr(from), to: toDateStr(to) }
 }
 
-export default function TokenTrendChart() {
+export default function TokenTrendChart({ userId } = {}) {
   const [days, setDays] = useState(7)
   const { from, to } = rangeFor(days)
-  const { data, isLoading, isError } = useByDay({ from, to })
+  const { data, isLoading, isError } = useByDay({ from, to, userId })
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">

@@ -9,8 +9,8 @@ const COLORS = [
   '#f87171','#fb923c','#e879f9','#a78bfa','#818cf8',
 ]
 
-export default function ToolBreakdownPie({ from, to }) {
-  const { data, isLoading, isError } = useToolBreakdown({ from, to })
+export default function ToolBreakdownPie({ from, to, userId }) {
+  const { data, isLoading, isError } = useToolBreakdown({ from, to, userId })
 
   const chartData = data?.map((d) => ({ name: d.key, value: d.total_tokens })) ?? []
 

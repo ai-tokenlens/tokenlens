@@ -803,3 +803,34 @@ cd ~/progetti/tokenlens
 claude   # oppure /clear se stai continuando nella stessa finestra
 ```
 Incolla il prompt del prossimo agent. Aspetta. Leggi il riepilogo. Committa.
+
+---
+
+## AGENT-23 — Dashboard user filter + UserDetail analytics
+
+**Obiettivo:** filtraggio per utente su tutti i grafici della Dashboard; pagina UserDetail completa con analytics.
+
+**Server:**
+- Aggiunto `server/routers/users.py`: `GET /api/v1/users` → lista utenti con `event_count` (join su UsageEvent).
+- Montato in `server/main.py`.
+- `/analytics/by-day` già accettava `user_id`; nessuna modifica richiesta al service.
+
+**Frontend — client.js:**
+- `useAnalyticsSummary`, `useByDay`, `useToolBreakdown`: aggiunto parametro `userId` → `?user_id=`.
+- Aggiunto `useUsers()`: `GET /api/v1/users`.
+
+**Frontend — chart components:**
+- `TokenTrendChart`: accetta prop `userId`.
+- `ToolBreakdownPie`: accetta prop `userId`.
+- `TopConsumersChart`: quando `userId` è presente mostra breakdown per tool (via `useToolBreakdown`); quando assente mostra top consumer con barre cliccabili → `/users/:userId`.
+
+**Frontend — Dashboard.jsx:**
+- Dropdown "Utente" (dati da `useUsers()`); stato `selectedUser` propagato a tutti gli hook e chart.
+- KPI "Utenti attivi" nascosta quando un utente è selezionato.
+
+**Frontend — UserDetail.jsx:**
+- Header con userId, data primo accesso, event count totale.
+- `TokenTrendChart` filtrato per userId (ultimi 30 giorni).
+- BarChart orizzontale top tool (da `useAnalyticsSummary.by_tool`).
+- KPI 30gg e all-time: total/input/output/cache_read tokens.
+- `RecommendationPanel` conservato. Link "← Dashboard".
