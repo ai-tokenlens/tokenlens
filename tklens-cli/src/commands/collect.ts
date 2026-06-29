@@ -18,6 +18,59 @@ export interface EventPayload {
   timestamp: string;
 }
 
+export interface LastCollect {
+  timestamp: string;
+  sent: number;
+}
+
+export function getTklensDir(): string {
+  return path.join(os.homedir(), '.tklens');
+}
+
+export function readLastCollect(dir: string): LastCollect | null {
+  try {
+    const raw = fs.readFileSync(path.join(dir, 'last-collect.json'), 'utf-8');
+    return JSON.parse(raw) as LastCollect;
+  } catch {
+    return null;
+  }
+}
+
+export function writeLastCollect(dir: string, data: LastCollect): void {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'last-collect.json'), JSON.stringify(data, null, 2));
+}
+
+export function readPid(dir: string): number | null {
+  try {
+    const raw = fs.readFileSync(path.join(dir, 'collect.pid'), 'utf-8').trim();
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? null : n;
+  } catch {
+    return null;
+  }
+}
+
+export function writePid(dir: string, pid: number): void {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'collect.pid'), String(pid));
+}
+
+export function removePid(dir: string): void {
+  try { fs.unlinkSync(path.join(dir, 'collect.pid')); } catch { /* already gone */ }
+}
+
+export function appendLog(dir: string, msg: string): void {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'collect.log'), `[${new Date().toISOString()}] ${msg}\n`);
+  } catch { /* best-effort */ }
+}
+
+export function isProcessAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
 export function findFiles(dir: string, exts: string[]): string[] {
   const results: string[] = [];
   if (!fs.existsSync(dir)) return results;
@@ -159,6 +212,72 @@ export function filterBySince(events: EventPayload[], since: Date): EventPayload
   return events.filter(e => new Date(e.timestamp) >= since);
 }
 
+export function collectEvents(tools: string[], userId: string, since?: Date): EventPayload[] {
+  const copilotFiles: string[] = [];
+  const claudeFiles: string[] = [];
+  for (const tool of tools) {
+    if (tool === 'copilot-cli') {
+      for (const d of copilotStorageDirs()) copilotFiles.push(...findFiles(d, ['.json']));
+    } else {
+      claudeFiles.push(...findFiles(path.join(os.homedir(), '.claude'), ['.jsonl']));
+    }
+  }
+  let events: EventPayload[] = [
+    ...parseCopilotFiles(copilotFiles),
+    ...parseClaudeCodeFiles(claudeFiles),
+  ];
+  if (since) events = filterBySince(events, since);
+  for (const ev of events) ev.user_id = userId;
+  return events;
+}
+
+export async function runOneCycle(
+  api: ApiClient,
+  tools: string[],
+  userId: string,
+  dir: string,
+  log: (msg: string) => void,
+): Promise<{ sent: number; timestamp: string }> {
+  const last = readLastCollect(dir);
+  const since = last ? new Date(last.timestamp) : undefined;
+  const events = collectEvents(tools, userId, since);
+
+  let sent = 0;
+  if (events.length > 0) {
+    for (let i = 0; i < events.length; i += 100) {
+      const batch = events.slice(i, i + 100);
+      await api.post<{ accepted: number }>('/api/v1/events/batch', { events: batch });
+      sent += batch.length;
+    }
+  }
+
+  const timestamp = new Date().toISOString();
+  const totalSent = (last?.sent ?? 0) + sent;
+  writeLastCollect(dir, { timestamp, sent: totalSent });
+  log(`cycle: sent=${sent} total=${totalSent}`);
+  return { sent, timestamp };
+}
+
+export async function runDaemonLoop(
+  api: ApiClient,
+  tools: string[],
+  userId: string,
+  intervalMs: number,
+  dir: string,
+  log: (msg: string) => void,
+  shouldStop: () => boolean,
+  sleepFn: (ms: number) => Promise<void> = (ms) => new Promise(r => setTimeout(r, ms)),
+): Promise<void> {
+  while (!shouldStop()) {
+    try {
+      await runOneCycle(api, tools, userId, dir, log);
+    } catch (err) {
+      log(`cycle error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (!shouldStop()) await sleepFn(intervalMs);
+  }
+}
+
 export default class Collect extends Command {
   static description = 'Fallback session-file collector — posts token estimates to TokenLens';
 
@@ -178,14 +297,105 @@ export default class Collect extends Command {
       description: 'Print events without sending (deprecated: prefer --output=json)',
       default: false,
     }),
+    daemon: Flags.boolean({
+      description: 'Run as a background daemon, polling on --interval',
+    }),
+    interval: Flags.integer({
+      description: 'Polling interval in minutes (only with --daemon; default 15, min 5)',
+      default: 15,
+    }),
+    stop: Flags.boolean({
+      description: 'Stop a running daemon (reads ~/.tklens/collect.pid)',
+    }),
+    status: Flags.boolean({
+      description: 'Show daemon status and last collection stats',
+    }),
   };
 
   async run(): Promise<void> {
     const { flags } = await this.parse(Collect);
     const config = readConfig();
     const userId = config.userId ?? os.userInfo().username;
+    const tklensDir = getTklensDir();
 
-    // Resolve which tools to collect from
+    // --stop
+    if (flags.stop) {
+      const pid = readPid(tklensDir);
+      if (pid === null) {
+        this.warn('No PID file found. Daemon may not be running.');
+        return;
+      }
+      try {
+        process.kill(pid, 'SIGTERM');
+        removePid(tklensDir);
+        this.log(`Sent SIGTERM to daemon (PID ${pid}).`);
+      } catch {
+        this.warn(`Could not signal PID ${pid}. Process may have already exited.`);
+        removePid(tklensDir);
+      }
+      return;
+    }
+
+    // --status
+    if (flags.status) {
+      const pid = readPid(tklensDir);
+      if (pid !== null && isProcessAlive(pid)) {
+        this.log(`Daemon running (PID ${pid}).`);
+      } else {
+        this.log('Daemon not running.');
+      }
+      const last = readLastCollect(tklensDir);
+      if (last) {
+        this.log(`Last run: ${last.timestamp}  Total events sent: ${last.sent}`);
+      } else {
+        this.log('No collection history found.');
+      }
+      return;
+    }
+
+    // --daemon
+    if (flags.daemon) {
+      const intervalMinutes = flags.interval ?? 15;
+      if (intervalMinutes < 5) this.error('--interval minimum is 5 minutes.');
+
+      const tools: string[] = [];
+      if (flags.tool) {
+        tools.push(flags.tool);
+      } else {
+        if (fs.existsSync(path.join(os.homedir(), '.claude'))) tools.push('claude-code');
+        if (copilotStorageDirs().some(d => fs.existsSync(d))) tools.push('copilot-cli');
+        if (tools.length === 0) this.error('No known tool directories found. Use --tool to specify one.');
+      }
+
+      writePid(tklensDir, process.pid);
+      const log = (msg: string) => appendLog(tklensDir, msg);
+
+      let stopping = false;
+      const cleanup = () => {
+        stopping = true;
+        removePid(tklensDir);
+        process.exit(0);
+      };
+      process.once('SIGTERM', cleanup);
+      process.once('SIGINT', cleanup);
+
+      this.log(`Daemon started (PID ${process.pid}). Interval: ${intervalMinutes}m. Logs: ${path.join(tklensDir, 'collect.log')}`);
+      log(`Daemon started. interval=${intervalMinutes}m tools=${tools.join(',')}`);
+
+      const api = new ApiClient();
+      await runDaemonLoop(
+        api,
+        tools,
+        userId,
+        intervalMinutes * 60 * 1000,
+        tklensDir,
+        log,
+        () => stopping,
+      );
+      return;
+    }
+
+    // one-shot (original behavior)
     const tools: string[] = [];
     if (flags.tool) {
       tools.push(flags.tool);
@@ -201,7 +411,6 @@ export default class Collect extends Command {
       this.log(`Auto-detected tool(s): ${tools.join(', ')}`);
     }
 
-    // Enumerate all session files
     const copilotFiles: string[] = [];
     const claudeFiles: string[] = [];
     for (const tool of tools) {
@@ -214,7 +423,6 @@ export default class Collect extends Command {
     const totalFiles = copilotFiles.length + claudeFiles.length;
     this.log(`Found ${totalFiles} session file(s) to scan.`);
 
-    // Progress bar (TTY only)
     const bar = process.stdout.isTTY && totalFiles > 0
       ? new cliProgress.SingleBar({ clearOnComplete: true }, cliProgress.Presets.shades_classic)
       : null;
@@ -227,7 +435,6 @@ export default class Collect extends Command {
 
     bar?.stop();
 
-    // Filter by --since
     if (flags.since) {
       const sinceDate = new Date(flags.since);
       if (isNaN(sinceDate.getTime())) {
@@ -238,7 +445,6 @@ export default class Collect extends Command {
       this.log(`--since filter: ${before} → ${events.length} event(s).`);
     }
 
-    // Stamp user_id
     for (const ev of events) ev.user_id = userId;
 
     this.log(`Extracted ${events.length} event(s) [source=session-file, estimates only].`);
